@@ -236,7 +236,10 @@ export default function ListingDetailPage() {
               )}
             </div>
             <button
-              onClick={() => setShowReview(true)}
+              onClick={async () => {
+                await fetchListing(); // Refresh listing to get latest ad
+                setShowReview(true);
+              }}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
             >
               Review & Export
