@@ -25,8 +25,8 @@ export async function POST(req: Request) {
     const prompt = buildAdPrompt(listing.car, validLanguage);
 
     const systemMessage = validLanguage === "sv"
-      ? "Du är en hjälpsam assistent som skriver ärliga begagnade bilannonser. Returnera alltid giltig JSON."
-      : "You are a helpful assistant that writes honest used-car ads. Always return valid JSON.";
+      ? "Du är en assistent som skriver ärliga begagnade bilannonser. Använd ENDAST informationen som tillhandahålls. Hitta INTE på fakta. Om information saknas, nämn det inte. Returnera alltid giltig JSON."
+      : "You are an assistant that writes honest used-car ads. Use ONLY the information provided. Do NOT invent facts. If information is missing, do not mention it. Always return valid JSON.";
 
     let resp;
     try {
