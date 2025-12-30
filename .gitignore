@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# uploads
+/uploads
+
+# data storage
+/data
+
+# shell configuration files (user-specific)
+.zshrc
+.bashrc
+.bash_profile
+.profile
