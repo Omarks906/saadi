@@ -42,9 +42,14 @@ next-env.d.ts
 
 # uploads
 /uploads
+/public/uploads
+public/uploads/
 
 # data storage
 /data
+
+# next.js build cache
+.next/
 
 # shell configuration files (user-specific)
 .zshrc
