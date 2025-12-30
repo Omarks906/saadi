@@ -15,6 +15,7 @@ export default function ListingDetailPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [backgroundColor, setBackgroundColor] = useState<string>("#FFFFFF"); // Default white
+  const [showReview, setShowReview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Debug: log params to see what we're getting
@@ -235,10 +236,10 @@ export default function ListingDetailPage() {
               )}
             </div>
             <button
-              onClick={handleExport}
+              onClick={() => setShowReview(true)}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
             >
-              Export ZIP
+              Review & Export
             </button>
           </div>
         </div>
@@ -397,6 +398,120 @@ export default function ListingDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Review Modal */}
+      {showReview && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+              <h2 className="text-2xl font-bold">Review Before Export</h2>
+              <button
+                onClick={() => setShowReview(false)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Ad Content Review */}
+              {listing.ad ? (
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold">Ad Content</h3>
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Headline</label>
+                      <p className="mt-1 text-lg font-semibold">{listing.ad.headline}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Short Description</label>
+                      <p className="mt-1">{listing.ad.short}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Body</label>
+                      <p className="mt-1 whitespace-pre-line">{listing.ad.body}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-600">Bullet Points</label>
+                      <ul className="mt-1 list-disc list-inside space-y-1">
+                        {listing.ad.bulletPoints.map((point, idx) => (
+                          <li key={idx}>{point}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-yellow-800">
+                    No ad generated yet. Generate an ad first before exporting.
+                  </p>
+                </div>
+              )}
+
+              {/* Photos to Export */}
+              <div className="space-y-4">
+                <h3 className="text-xl font-semibold">
+                  Photos to Export ({photos.filter((p) => p.status === "processed" && p.processedUrl).length})
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {photos
+                    .filter((p) => p.status === "processed" && p.processedUrl)
+                    .map((photo) => (
+                      <div key={photo.filename} className="relative aspect-square rounded-lg overflow-hidden border-2 border-green-500">
+                        <img
+                          src={photo.processedUrl}
+                          alt={photo.filename}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded">
+                          ✓ Ready
+                        </div>
+                      </div>
+                    ))}
+                </div>
+                {photos.filter((p) => p.status === "processed" && p.processedUrl).length === 0 && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <p className="text-yellow-800">
+                      No processed photos to export. Process some photos first.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Export Summary */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-semibold text-blue-900 mb-2">Export Summary</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• {photos.filter((p) => p.status === "processed" && p.processedUrl).length} processed photos</li>
+                  <li>• {listing.ad ? "Ad content included" : "No ad content (generate ad first)"}</li>
+                  <li>• ZIP file will be downloaded</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="sticky bottom-0 bg-white border-t px-6 py-4 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowReview(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setShowReview(false);
+                  await handleExport();
+                }}
+                disabled={photos.filter((p) => p.status === "processed" && p.processedUrl).length === 0}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Export ZIP
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
