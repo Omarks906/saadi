@@ -6,10 +6,13 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const { listingId } = await req.json().catch(() => ({}));
+    const { listingId, language = "en" } = await req.json().catch(() => ({}));
     if (!listingId) {
       return NextResponse.json({ error: "Missing listingId" }, { status: 400 });
     }
+
+    // Validate language
+    const validLanguage = language === "sv" ? "sv" : "en";
 
     let listing;
     try {
@@ -19,14 +22,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Listing not found" }, { status: 404 });
     }
 
-    const prompt = buildAdPrompt(listing.car);
+    const prompt = buildAdPrompt(listing.car, validLanguage);
+
+    const systemMessage = validLanguage === "sv"
+      ? "Du är en hjälpsam assistent som skriver ärliga begagnade bilannonser. Returnera alltid giltig JSON."
+      : "You are a helpful assistant that writes honest used-car ads. Always return valid JSON.";
 
     let resp;
     try {
       resp = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "You are a helpful assistant that writes honest used-car ads. Always return valid JSON." },
+          { role: "system", content: systemMessage },
           { role: "user", content: prompt },
         ],
         response_format: { type: "json_object" },

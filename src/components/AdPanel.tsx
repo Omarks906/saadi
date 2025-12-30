@@ -19,6 +19,7 @@ export default function AdPanel({ listingId, title, description }: AdPanelProps)
   const [adContent, setAdContent] = useState<AdContent | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [language, setLanguage] = useState<"en" | "sv">("en");
 
   const generateAd = async () => {
     setIsGenerating(true);
@@ -30,7 +31,7 @@ export default function AdPanel({ listingId, title, description }: AdPanelProps)
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ listingId }),
+        body: JSON.stringify({ listingId, language }),
       });
 
       if (!response.ok) {
@@ -132,6 +133,33 @@ export default function AdPanel({ listingId, title, description }: AdPanelProps)
         >
           {isGenerating ? "Generating..." : "Generate Ad"}
         </button>
+      </div>
+
+      {/* Language Selector */}
+      <div className="flex items-center gap-3">
+        <label className="text-sm font-medium text-gray-700">Language:</label>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setLanguage("en")}
+            className={`px-3 py-1 text-sm rounded ${
+              language === "en"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            English
+          </button>
+          <button
+            onClick={() => setLanguage("sv")}
+            className={`px-3 py-1 text-sm rounded ${
+              language === "sv"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            Swedish
+          </button>
+        </div>
       </div>
 
       {error && (
