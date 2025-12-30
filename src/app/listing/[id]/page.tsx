@@ -135,6 +135,33 @@ export default function ListingDetailPage() {
     }
   };
 
+  const handleDeletePhoto = async (filename: string) => {
+    if (!listingId) return;
+    
+    if (!confirm("Are you sure you want to delete this photo?")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/photos/delete?listingId=${listingId}&filename=${encodeURIComponent(filename)}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to delete photo");
+      }
+
+      await fetchListing(); // Refresh listing data
+    } catch (err) {
+      console.error("Delete photo error:", err);
+      alert(`Failed to delete photo: ${err instanceof Error ? err.message : "Unknown error"}`);
+    }
+  };
+
   const handleExport = async () => {
     if (!listingId) return;
     
@@ -326,9 +353,9 @@ export default function ListingDetailPage() {
             {photos.length > 0 && (
               <div className="space-y-2">
                 {photos.map((photo) => (
-                  <div key={photo.filename} className="flex items-center justify-between p-3 bg-white rounded-lg border">
+                  <div key={photo.filename} className="flex items-center justify-between p-3 bg-white rounded-lg border gap-2">
                     <span className="text-sm truncate flex-1">{photo.filename}</span>
-                    <span className={`text-xs px-2 py-1 rounded ${
+                    <span className={`text-xs px-2 py-1 rounded whitespace-nowrap ${
                       photo.status === "processed" ? "bg-green-100 text-green-800" :
                       photo.status === "processing" ? "bg-yellow-100 text-yellow-800" :
                       photo.status === "failed" ? "bg-red-100 text-red-800" :
@@ -336,15 +363,25 @@ export default function ListingDetailPage() {
                     }`}>
                       {photo.status}
                     </span>
-                    {(photo.status === "uploaded" || photo.status === "failed") && !photo.processedUrl && (
+                    <div className="flex items-center gap-2">
+                      {(photo.status === "uploaded" || photo.status === "failed") && !photo.processedUrl && (
+                        <button
+                          onClick={() => handleRemoveBackground(photo.filename)}
+                          disabled={isProcessing === photo.filename || !!isProcessing}
+                          className="px-3 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isProcessing === photo.filename ? "Processing..." : photo.status === "failed" ? "Retry" : "Remove BG"}
+                        </button>
+                      )}
                       <button
-                        onClick={() => handleRemoveBackground(photo.filename)}
+                        onClick={() => handleDeletePhoto(photo.filename)}
                         disabled={isProcessing === photo.filename || !!isProcessing}
-                        className="ml-2 px-3 py-1 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Delete photo"
                       >
-                        {isProcessing === photo.filename ? "Processing..." : photo.status === "failed" ? "Retry" : "Remove BG"}
+                        Delete
                       </button>
-                    )}
+                    </div>
                   </div>
                 ))}
               </div>
