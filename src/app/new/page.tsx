@@ -263,7 +263,9 @@ export default function NewListingPage() {
             <label className="text-sm text-gray-600">Make</label>
             <select className="border rounded-xl p-3 w-full" 
               value={car.make} onChange={(e)=>{
-                setCar({...car, make: e.target.value, model: ""}); // Reset model when make changes
+                const selectedMake = e.target.value;
+                console.log("Make selected:", selectedMake, "Has models:", CAR_MODELS[selectedMake]);
+                setCar({...car, make: selectedMake, model: ""}); // Reset model when make changes
               }}>
               <option value="">Select make</option>
               {CAR_MAKES.map(make => (
