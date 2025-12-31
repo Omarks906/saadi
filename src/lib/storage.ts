@@ -14,6 +14,12 @@ export type Listing = {
     fuel?: string;
     price?: number;
     notes?: string;
+    features?: string[];
+    exteriorColor?: string;
+    interiorColor?: string;
+    trim?: string;
+    fwd?: boolean;
+    condition?: string;
   };
   photos: Array<{
     filename: string;

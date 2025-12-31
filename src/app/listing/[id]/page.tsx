@@ -392,7 +392,80 @@ export default function ListingDetailPage() {
             )}
           </div>
 
-          <div>
+          <div className="space-y-4">
+            {/* Car Details */}
+            <div className="bg-white rounded-lg border p-4 space-y-3">
+              <h2 className="text-xl font-semibold mb-3">Car Details</h2>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {listing.car.mileageKm > 0 && (
+                  <div>
+                    <span className="text-gray-600">Mileage:</span>
+                    <span className="ml-2 font-medium">{listing.car.mileageKm.toLocaleString()} km</span>
+                  </div>
+                )}
+                {listing.car.transmission && (
+                  <div>
+                    <span className="text-gray-600">Transmission:</span>
+                    <span className="ml-2 font-medium">{listing.car.transmission}</span>
+                  </div>
+                )}
+                {listing.car.fuel && (
+                  <div>
+                    <span className="text-gray-600">Fuel:</span>
+                    <span className="ml-2 font-medium">{listing.car.fuel}</span>
+                  </div>
+                )}
+                {listing.car.exteriorColor && (
+                  <div>
+                    <span className="text-gray-600">Exterior Color:</span>
+                    <span className="ml-2 font-medium">{listing.car.exteriorColor}</span>
+                  </div>
+                )}
+                {listing.car.interiorColor && (
+                  <div>
+                    <span className="text-gray-600">Interior Color:</span>
+                    <span className="ml-2 font-medium">{listing.car.interiorColor}</span>
+                  </div>
+                )}
+                {listing.car.trim && (
+                  <div>
+                    <span className="text-gray-600">Trim:</span>
+                    <span className="ml-2 font-medium">{listing.car.trim}</span>
+                  </div>
+                )}
+                {listing.car.condition && (
+                  <div>
+                    <span className="text-gray-600">Condition:</span>
+                    <span className="ml-2 font-medium">{listing.car.condition}</span>
+                  </div>
+                )}
+                {listing.car.fwd !== undefined && (
+                  <div>
+                    <span className="text-gray-600">Drive:</span>
+                    <span className="ml-2 font-medium">{listing.car.fwd ? "FWD" : "RWD/AWD"}</span>
+                  </div>
+                )}
+                {listing.car.price && listing.car.price > 0 && (
+                  <div>
+                    <span className="text-gray-600">Price:</span>
+                    <span className="ml-2 font-medium">{listing.car.price.toLocaleString()} SEK</span>
+                  </div>
+                )}
+              </div>
+              {listing.car.features && listing.car.features.length > 0 && (
+                <div className="mt-3 pt-3 border-t">
+                  <span className="text-gray-600 text-sm block mb-2">Features:</span>
+                  <div className="flex flex-wrap gap-2">
+                    {listing.car.features.map((feature, idx) => (
+                      <span key={idx} className="bg-gray-100 px-2 py-1 rounded text-xs">
+                        {feature}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <AdPanel
               listingId={listing.id}
               title={`${listing.car.year} ${listing.car.make} ${listing.car.model}`}
