@@ -155,6 +155,12 @@ export default function NewListingPage() {
         throw new Error(data.error || "Failed to lookup car data");
       }
 
+      // Check if lookup failed (VIN not in database, etc.)
+      if (data.success === false) {
+        setLookupError(data.note || data.message || "VIN not found. Please enter car details manually.");
+        return;
+      }
+
       // If we get car data, populate the form
       if (data.data) {
         const carData = data.data;
