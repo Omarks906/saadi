@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
             // Capitalize properly (e.g., "SUBARU" -> "Subaru", "BMW" -> "BMW")
             cleanMake = cleanMake
               .split(/\s+/)
-              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+              .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
               .join(" ");
             
             // Special cases for known brands
