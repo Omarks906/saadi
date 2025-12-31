@@ -273,8 +273,18 @@ export default function NewListingPage() {
           </div>
           <div className="space-y-1">
             <label className="text-sm text-gray-600">Model</label>
-            <input className="border rounded-xl p-3 w-full" placeholder="e.g., Corolla"
-              value={car.model} onChange={(e)=>setCar({...car,model:e.target.value})}/>
+            {car.make && CAR_MODELS[car.make] && CAR_MODELS[car.make].length > 0 ? (
+              <select className="border rounded-xl p-3 w-full" 
+                value={car.model} onChange={(e)=>setCar({...car,model:e.target.value})}>
+                <option value="">Select model</option>
+                {CAR_MODELS[car.make].map(model => (
+                  <option key={model} value={model}>{model}</option>
+                ))}
+              </select>
+            ) : (
+              <input className="border rounded-xl p-3 w-full" placeholder={car.make ? "Enter model name" : "e.g., Corolla"}
+                value={car.model} onChange={(e)=>setCar({...car,model:e.target.value})}/>
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-sm text-gray-600">Year</label>
