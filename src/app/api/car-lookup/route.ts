@@ -51,8 +51,64 @@ export async function POST(req: NextRequest) {
       trim: "",
     };
 
-    // Demo data for testing (remove when real API is available)
-    if (DEMO_MODE && registrationNumber) {
+    // Step 1: Try VIN decoder (FREE - NHTSA API)
+    // This works for many international brands including Volvo, BMW, Toyota, etc.
+    if (vin && vin.length === 17) {
+      try {
+        const vinResponse = await fetch(
+          `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVin/${vin}?format=json`,
+          { next: { revalidate: 3600 } } // Cache for 1 hour
+        );
+        const vinData = await vinResponse.json();
+        
+        if (vinData.Results && vinData.Results.length > 0) {
+          const results = vinData.Results;
+          
+          // Extract data from NHTSA response
+          const getValue = (variable: string) => {
+            const item = results.find((r: any) => r.Variable === variable);
+            return item?.Value && item.Value !== "Not Applicable" ? item.Value : null;
+          };
+          
+          carData = {
+            ...carData,
+            make: getValue("Make") || carData.make,
+            model: getValue("Model") || carData.model,
+            year: getValue("Model Year") ? parseInt(getValue("Model Year")) : carData.year,
+            engineSize: getValue("Displacement (L)") ? `${getValue("Displacement (L)")}L` : carData.engineSize,
+            transmission: getValue("Transmission Style") || carData.transmission,
+            fuel: getValue("Fuel Type - Primary") || carData.fuel,
+            doors: getValue("Doors") ? parseInt(getValue("Doors")) : carData.doors,
+            seats: getValue("Seats") ? parseInt(getValue("Seats")) : carData.seats,
+            trim: getValue("Trim") || carData.trim,
+          };
+        }
+      } catch (vinError) {
+        console.error("VIN decode error:", vinError);
+        // Continue to demo mode or other sources
+      }
+    }
+
+    // Step 2: Try car.info API if available (for Swedish registration numbers)
+    if (process.env.CAR_INFO_API_KEY && registrationNumber) {
+      try {
+        // TODO: Replace with actual car.info API endpoint when available
+        // const carInfoResponse = await fetch(
+        //   `https://api.car.info/v1/vehicles/${registrationNumber}`,
+        //   { headers: { 'Authorization': `Bearer ${process.env.CAR_INFO_API_KEY}` } }
+        // );
+        // const carInfoData = await carInfoResponse.json();
+        // Merge carInfoData with carData
+      } catch (carInfoError) {
+        console.error("car.info API error:", carInfoError);
+      }
+    }
+
+    // Step 3: Demo data for testing (only if no real data found)
+    // Remove this when real API is fully integrated
+    const hasRealData = carData.make || carData.model || carData.year;
+    
+    if (DEMO_MODE && registrationNumber && !hasRealData) {
       // Return sample data based on registration number pattern
       const regUpper = registrationNumber.toUpperCase();
       
@@ -110,19 +166,25 @@ export async function POST(req: NextRequest) {
     }
     */
 
-    // Check if we have demo data or real data
+    // Check if we have real data or demo data
     const hasData = carData.make || carData.model || carData.year;
+    const isRealData = hasData && !(DEMO_MODE && registrationNumber && !vin);
     
     return NextResponse.json({
       success: true,
       message: hasData 
-        ? "Car data found! (Demo mode - using sample data)" 
-        : "Lookup completed. API integration needed for real data.",
+        ? (isRealData 
+            ? "Car data found from VIN decoder!" 
+            : "Car data found! (Demo mode - using sample data)")
+        : "Lookup completed. Enter a VIN for real data, or car.info API needed for registration number lookup.",
       data: carData,
       note: hasData 
-        ? "This is demo data for testing. Real API integration needed for production."
-        : "Lookup service is ready. To enable real car data lookup, integrate with car.info API or an alternative service. For now, please enter car details manually.",
-      demoMode: DEMO_MODE && hasData,
+        ? (isRealData
+            ? "Real vehicle data decoded from VIN. For Swedish registration number lookup, car.info API integration needed."
+            : "This is demo data for testing. Enter a VIN for real data, or integrate car.info API for registration number lookup.")
+        : "Enter a 17-character VIN to get real vehicle data, or integrate car.info API for Swedish registration number lookup.",
+      demoMode: DEMO_MODE && hasData && !isRealData,
+      source: isRealData ? "vin_decoder" : (hasData ? "demo" : "none"),
     });
   } catch (error: any) {
     console.error("Car lookup error:", error);
