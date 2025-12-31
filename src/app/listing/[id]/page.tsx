@@ -451,6 +451,42 @@ export default function ListingDetailPage() {
                     <span className="ml-2 font-medium">{listing.car.price.toLocaleString()} SEK</span>
                   </div>
                 )}
+                {listing.car.registrationNumber && (
+                  <div>
+                    <span className="text-gray-600">Registration:</span>
+                    <span className="ml-2 font-medium">{listing.car.registrationNumber}</span>
+                  </div>
+                )}
+                {listing.car.vin && (
+                  <div>
+                    <span className="text-gray-600">VIN:</span>
+                    <span className="ml-2 font-medium font-mono text-xs">{listing.car.vin}</span>
+                  </div>
+                )}
+                {listing.car.engineSize && (
+                  <div>
+                    <span className="text-gray-600">Engine:</span>
+                    <span className="ml-2 font-medium">{listing.car.engineSize}</span>
+                  </div>
+                )}
+                {listing.car.power && listing.car.power > 0 && (
+                  <div>
+                    <span className="text-gray-600">Power:</span>
+                    <span className="ml-2 font-medium">{listing.car.power} hk</span>
+                  </div>
+                )}
+                {listing.car.doors && listing.car.doors > 0 && (
+                  <div>
+                    <span className="text-gray-600">Doors:</span>
+                    <span className="ml-2 font-medium">{listing.car.doors}</span>
+                  </div>
+                )}
+                {listing.car.seats && listing.car.seats > 0 && (
+                  <div>
+                    <span className="text-gray-600">Seats:</span>
+                    <span className="ml-2 font-medium">{listing.car.seats}</span>
+                  </div>
+                )}
               </div>
               {listing.car.features && listing.car.features.length > 0 && (
                 <div className="mt-3 pt-3 border-t">

@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 
-// Predefined options for dropdowns
+// Predefined options for dropdowns - Popular brands in Sweden/Europe
 const CAR_MAKES = [
-  "Audi", "BMW", "Citroën", "Fiat", "Ford", "Hyundai", "Kia", "Mercedes-Benz",
-  "Nissan", "Opel", "Peugeot", "Renault", "Seat", "Skoda", "Toyota", "Volkswagen", "Volvo"
+  "Alfa Romeo", "Audi", "BMW", "Citroën", "Dacia", "Fiat", "Ford", "Honda",
+  "Hyundai", "Jaguar", "Jeep", "Kia", "Land Rover", "Lexus", "Mazda", "Mercedes-Benz",
+  "Mini", "Mitsubishi", "Nissan", "Opel", "Peugeot", "Porsche", "Renault", "Seat",
+  "Skoda", "Subaru", "Suzuki", "Tesla", "Toyota", "Volkswagen", "Volvo"
 ].sort();
 
 const TRANSMISSIONS = ["Automatic", "Manual", "CVT", "Dual Clutch", "Semi-Automatic"];
@@ -38,9 +40,17 @@ export default function NewListingPage() {
     trim: "",
     fwd: false,
     condition: "",
+    registrationNumber: "",
+    vin: "",
+    engineSize: "",
+    power: 0,
+    doors: 0,
+    seats: 0,
   });
   
   const [featureInput, setFeatureInput] = useState("");
+  const [isLookingUp, setIsLookingUp] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
 
   async function create() {
     try {
@@ -85,10 +95,104 @@ export default function NewListingPage() {
     setCar({ ...car, features: car.features.filter((_, i) => i !== index) });
   };
 
+  const lookupCarData = async () => {
+    if (!car.registrationNumber && !car.vin) {
+      setLookupError("Please enter a registration number or VIN");
+      return;
+    }
+
+    setIsLookingUp(true);
+    setLookupError(null);
+
+    try {
+      const response = await fetch("/api/car-lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          registrationNumber: car.registrationNumber || undefined,
+          vin: car.vin || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to lookup car data");
+      }
+
+      // If we get car data, populate the form
+      if (data.data) {
+        const carData = data.data;
+        setCar({
+          ...car,
+          make: carData.make || car.make,
+          model: carData.model || car.model,
+          year: carData.year || car.year,
+          mileageKm: carData.mileageKm || car.mileageKm,
+          transmission: carData.transmission || car.transmission,
+          fuel: carData.fuel || car.fuel,
+          engineSize: carData.engineSize || car.engineSize,
+          power: carData.power || car.power,
+          doors: carData.doors || car.doors,
+          seats: carData.seats || car.seats,
+          exteriorColor: carData.exteriorColor || car.exteriorColor,
+          interiorColor: carData.interiorColor || car.interiorColor,
+          trim: carData.trim || car.trim,
+        });
+      }
+
+      // Show message about API integration status
+      if (data.integration) {
+        console.log("API Integration Info:", data.integration);
+      }
+    } catch (err) {
+      console.error("Lookup error:", err);
+      setLookupError(err instanceof Error ? err.message : "Failed to lookup car data");
+    } finally {
+      setIsLookingUp(false);
+    }
+  };
+
   return (
     <main className="min-h-screen p-8">
       <div className="max-w-2xl mx-auto space-y-4">
         <h1 className="text-2xl font-semibold">New listing</h1>
+        
+        {/* Registration Number Lookup */}
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-blue-900">Quick Lookup</h2>
+            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">car.info compatible</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-sm text-gray-600">Registration Number</label>
+              <input className="border rounded-xl p-3 w-full" placeholder="e.g., ABC123"
+                value={car.registrationNumber} onChange={(e)=>setCar({...car,registrationNumber:e.target.value.toUpperCase()})}
+                maxLength={6}/>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm text-gray-600">VIN (Optional)</label>
+              <input className="border rounded-xl p-3 w-full" placeholder="17-character VIN"
+                value={car.vin} onChange={(e)=>setCar({...car,vin:e.target.value.toUpperCase()})}
+                maxLength={17}/>
+            </div>
+          </div>
+          <button 
+            onClick={lookupCarData}
+            disabled={isLookingUp || (!car.registrationNumber && !car.vin)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+            {isLookingUp ? "Looking up..." : "Lookup Car Data"}
+          </button>
+          {lookupError && (
+            <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+              {lookupError}
+            </div>
+          )}
+          <p className="text-xs text-gray-600">
+            Enter a Swedish registration number to auto-fill car details. Integration with car.info API ready when available.
+          </p>
+        </div>
         
         {/* Basic Info */}
         <div className="grid grid-cols-2 gap-3">
@@ -141,6 +245,54 @@ export default function NewListingPage() {
             <label className="text-sm text-gray-600">Price (SEK)</label>
             <input className="border rounded-xl p-3 w-full" type="number" placeholder="e.g., 150000"
               value={car.price || ""} onChange={(e)=>setCar({...car,price:Number(e.target.value) || 0})}/>
+          </div>
+        </div>
+
+        {/* Additional Technical Details */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Engine Size</label>
+            <input className="border rounded-xl p-3 w-full" placeholder="e.g., 2.0L, 1.6 TDI"
+              value={car.engineSize} onChange={(e)=>setCar({...car,engineSize:e.target.value})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Power (hk)</label>
+            <input className="border rounded-xl p-3 w-full" type="number" placeholder="e.g., 150"
+              value={car.power || ""} onChange={(e)=>setCar({...car,power:Number(e.target.value) || 0})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Doors</label>
+            <input className="border rounded-xl p-3 w-full" type="number" placeholder="e.g., 5"
+              value={car.doors || ""} onChange={(e)=>setCar({...car,doors:Number(e.target.value) || 0})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Seats</label>
+            <input className="border rounded-xl p-3 w-full" type="number" placeholder="e.g., 5"
+              value={car.seats || ""} onChange={(e)=>setCar({...car,seats:Number(e.target.value) || 0})}/>
+          </div>
+        </div>
+
+        {/* Additional Technical Details */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Engine Size</label>
+            <input className="border rounded-xl p-3 w-full" placeholder="e.g., 2.0L, 1.6 TDI"
+              value={car.engineSize} onChange={(e)=>setCar({...car,engineSize:e.target.value})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Power (hk)</label>
+            <input className="border rounded-xl p-3 w-full" type="number" placeholder="e.g., 150"
+              value={car.power || ""} onChange={(e)=>setCar({...car,power:Number(e.target.value) || 0})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Doors</label>
+            <input className="border rounded-xl p-3 w-full" type="number" placeholder="e.g., 5"
+              value={car.doors || ""} onChange={(e)=>setCar({...car,doors:Number(e.target.value) || 0})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Seats</label>
+            <input className="border rounded-xl p-3 w-full" type="number" placeholder="e.g., 5"
+              value={car.seats || ""} onChange={(e)=>setCar({...car,seats:Number(e.target.value) || 0})}/>
           </div>
         </div>
 

@@ -20,6 +20,12 @@ export type Listing = {
     trim?: string;
     fwd?: boolean;
     condition?: string;
+    registrationNumber?: string; // Swedish registration number (e.g., ABC123)
+    vin?: string; // Vehicle Identification Number
+    engineSize?: string; // e.g., "2.0L", "1.6 TDI"
+    power?: number; // Horsepower (hk)
+    doors?: number;
+    seats?: number;
   };
   photos: Array<{
     filename: string;
