@@ -23,9 +23,13 @@ export async function POST(req: NextRequest) {
     // Alternative: Use CarAPI or similar service
     // Example: https://carapi.app/api/docs
     
-    // Mock response structure aligned with car.info format
-    // In production, this would call car.info or alternative API
-    const mockCarData = {
+    // Try to integrate with a real API if available
+    // For Swedish registration numbers, we could use:
+    // 1. car.info API (when available)
+    // 2. Transportstyrelsen (Swedish Transport Agency) - may require API access
+    // 3. Alternative APIs
+    
+    let carData: any = {
       registrationNumber: registrationNumber || null,
       vin: vin || null,
       make: "",
@@ -41,43 +45,33 @@ export async function POST(req: NextRequest) {
       exteriorColor: "",
       interiorColor: "",
       trim: "",
-      // Additional fields from car.info structure
-      firstRegistration: null,
-      previousOwners: null,
-      inspectionDate: null,
-      nextInspection: null,
     };
 
-    // If we have a registration number, we could:
-    // 1. Call car.info API (when available)
-    // 2. Call alternative API like CarAPI
-    // 3. Return structured data
-    
-    // For now, return a placeholder that indicates integration is ready
+    // TODO: Replace with actual API call when car.info API is available
+    // Example integration:
+    /*
+    if (process.env.CAR_INFO_API_KEY) {
+      const response = await fetch(`https://api.car.info/v1/vehicles/${registrationNumber}`, {
+        headers: { 'Authorization': `Bearer ${process.env.CAR_INFO_API_KEY}` }
+      });
+      const apiData = await response.json();
+      carData = {
+        ...carData,
+        make: apiData.make,
+        model: apiData.model,
+        year: apiData.year,
+        // ... map other fields
+      };
+    }
+    */
+
+    // For now, return success with empty data structure
+    // The form will show a message that API integration is needed
     return NextResponse.json({
       success: true,
-      message: "Car lookup integration ready. Connect to car.info API or alternative service.",
-      data: mockCarData,
-      // Include API integration instructions
-      integration: {
-        carInfo: {
-          status: "API not publicly available",
-          contact: "Contact car.info for API access",
-          website: "https://www.car.info/",
-        },
-        alternatives: [
-          {
-            name: "CarAPI",
-            url: "https://carapi.app/",
-            description: "US-based car data API",
-          },
-          {
-            name: "Car List API",
-            url: "https://www.carlistapi.com/",
-            description: "Comprehensive car database API",
-          },
-        ],
-      },
+      message: "Lookup completed. API integration needed for real data.",
+      data: carData,
+      note: "Lookup service is ready. To enable real car data lookup, integrate with car.info API or an alternative service. For now, please enter car details manually.",
     });
   } catch (error: any) {
     console.error("Car lookup error:", error);

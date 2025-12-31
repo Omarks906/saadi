@@ -123,27 +123,33 @@ export default function NewListingPage() {
       // If we get car data, populate the form
       if (data.data) {
         const carData = data.data;
-        setCar({
-          ...car,
-          make: carData.make || car.make,
-          model: carData.model || car.model,
-          year: carData.year || car.year,
-          mileageKm: carData.mileageKm || car.mileageKm,
-          transmission: carData.transmission || car.transmission,
-          fuel: carData.fuel || car.fuel,
-          engineSize: carData.engineSize || car.engineSize,
-          power: carData.power || car.power,
-          doors: carData.doors || car.doors,
-          seats: carData.seats || car.seats,
-          exteriorColor: carData.exteriorColor || car.exteriorColor,
-          interiorColor: carData.interiorColor || car.interiorColor,
-          trim: carData.trim || car.trim,
-        });
-      }
-
-      // Show message about API integration status
-      if (data.integration) {
-        console.log("API Integration Info:", data.integration);
+        const hasData = carData.make || carData.model || carData.year;
+        
+        if (hasData) {
+          // Real data found - populate form
+          setCar({
+            ...car,
+            make: carData.make || car.make,
+            model: carData.model || car.model,
+            year: carData.year || car.year,
+            mileageKm: carData.mileageKm || car.mileageKm,
+            transmission: carData.transmission || car.transmission,
+            fuel: carData.fuel || car.fuel,
+            engineSize: carData.engineSize || car.engineSize,
+            power: carData.power || car.power,
+            doors: carData.doors || car.doors,
+            seats: carData.seats || car.seats,
+            exteriorColor: carData.exteriorColor || car.exteriorColor,
+            interiorColor: carData.interiorColor || car.interiorColor,
+            trim: carData.trim || car.trim,
+          });
+          setLookupError(null);
+        } else {
+          // No data found - show info message
+          setLookupError(data.note || "API integration needed. Please enter car details manually.");
+        }
+      } else {
+        setLookupError("No data returned from lookup service.");
       }
     } catch (err) {
       console.error("Lookup error:", err);
@@ -185,7 +191,11 @@ export default function NewListingPage() {
             {isLookingUp ? "Looking up..." : "Lookup Car Data"}
           </button>
           {lookupError && (
-            <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+            <div className={`text-sm p-2 rounded ${
+              lookupError.includes("API integration") || lookupError.includes("needed") || lookupError.includes("ready")
+                ? "text-blue-600 bg-blue-50 border border-blue-200"
+                : "text-red-600 bg-red-50 border border-red-200"
+            }`}>
               {lookupError}
             </div>
           )}
