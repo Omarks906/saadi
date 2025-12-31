@@ -72,32 +72,65 @@ export default function NewListingPage() {
         
         {/* Basic Info */}
         <div className="grid grid-cols-2 gap-3">
-          <input className="border rounded-xl p-3" placeholder="Make (e.g., Toyota)"
-            value={car.make} onChange={(e)=>setCar({...car,make:e.target.value})}/>
-          <input className="border rounded-xl p-3" placeholder="Model (e.g., Corolla)"
-            value={car.model} onChange={(e)=>setCar({...car,model:e.target.value})}/>
-          <input className="border rounded-xl p-3" type="number" placeholder="Year"
-            value={car.year} onChange={(e)=>setCar({...car,year:Number(e.target.value)})}/>
-          <input className="border rounded-xl p-3" type="number" placeholder="Mileage (km)"
-            value={car.mileageKm} onChange={(e)=>setCar({...car,mileageKm:Number(e.target.value)})}/>
-          <input className="border rounded-xl p-3" placeholder="Transmission (e.g., Automatic, Manual)"
-            value={car.transmission} onChange={(e)=>setCar({...car,transmission:e.target.value})}/>
-          <input className="border rounded-xl p-3" placeholder="Fuel (e.g., Gasoline, Diesel, Electric)"
-            value={car.fuel} onChange={(e)=>setCar({...car,fuel:e.target.value})}/>
-          <input className="border rounded-xl p-3" type="number" placeholder="Price (SEK)"
-            value={car.price} onChange={(e)=>setCar({...car,price:Number(e.target.value)})}/>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Make</label>
+            <input className="border rounded-xl p-3 w-full" placeholder="e.g., Toyota"
+              value={car.make} onChange={(e)=>setCar({...car,make:e.target.value})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Model</label>
+            <input className="border rounded-xl p-3 w-full" placeholder="e.g., Corolla"
+              value={car.model} onChange={(e)=>setCar({...car,model:e.target.value})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Year</label>
+            <input className="border rounded-xl p-3 w-full" type="number" placeholder="e.g., 2020"
+              value={car.year || ""} onChange={(e)=>setCar({...car,year:Number(e.target.value) || 0})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Mileage (km)</label>
+            <input className="border rounded-xl p-3 w-full" type="number" placeholder="e.g., 50000"
+              value={car.mileageKm || ""} onChange={(e)=>setCar({...car,mileageKm:Number(e.target.value) || 0})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Transmission</label>
+            <input className="border rounded-xl p-3 w-full" placeholder="e.g., Automatic, Manual"
+              value={car.transmission} onChange={(e)=>setCar({...car,transmission:e.target.value})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Fuel</label>
+            <input className="border rounded-xl p-3 w-full" placeholder="e.g., Gasoline, Diesel, Electric"
+              value={car.fuel} onChange={(e)=>setCar({...car,fuel:e.target.value})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Price (SEK)</label>
+            <input className="border rounded-xl p-3 w-full" type="number" placeholder="e.g., 150000"
+              value={car.price || ""} onChange={(e)=>setCar({...car,price:Number(e.target.value) || 0})}/>
+          </div>
         </div>
 
         {/* Additional Details */}
         <div className="grid grid-cols-2 gap-3">
-          <input className="border rounded-xl p-3" placeholder="Exterior color"
-            value={car.exteriorColor} onChange={(e)=>setCar({...car,exteriorColor:e.target.value})}/>
-          <input className="border rounded-xl p-3" placeholder="Interior color"
-            value={car.interiorColor} onChange={(e)=>setCar({...car,interiorColor:e.target.value})}/>
-          <input className="border rounded-xl p-3" placeholder="Trim"
-            value={car.trim} onChange={(e)=>setCar({...car,trim:e.target.value})}/>
-          <input className="border rounded-xl p-3" placeholder="Condition"
-            value={car.condition} onChange={(e)=>setCar({...car,condition:e.target.value})}/>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Exterior Color</label>
+            <input className="border rounded-xl p-3 w-full" placeholder="e.g., Silver, Black"
+              value={car.exteriorColor} onChange={(e)=>setCar({...car,exteriorColor:e.target.value})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Interior Color</label>
+            <input className="border rounded-xl p-3 w-full" placeholder="e.g., Black, Beige"
+              value={car.interiorColor} onChange={(e)=>setCar({...car,interiorColor:e.target.value})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Trim</label>
+            <input className="border rounded-xl p-3 w-full" placeholder="e.g., SE, LE, XLE"
+              value={car.trim} onChange={(e)=>setCar({...car,trim:e.target.value})}/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm text-gray-600">Condition</label>
+            <input className="border rounded-xl p-3 w-full" placeholder="e.g., Excellent, Good, Fair"
+              value={car.condition} onChange={(e)=>setCar({...car,condition:e.target.value})}/>
+          </div>
         </div>
 
         {/* FWD Checkbox */}
