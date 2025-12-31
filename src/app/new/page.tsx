@@ -72,15 +72,19 @@ export default function NewListingPage() {
         
         {/* Basic Info */}
         <div className="grid grid-cols-2 gap-3">
-          {(["make","model","transmission","fuel"] as const).map((k) => (
-            <input key={k} className="border rounded-xl p-3" placeholder={k}
-              value={(car as any)[k]} onChange={(e)=>setCar({...car,[k]:e.target.value})}/>
-          ))}
-          <input className="border rounded-xl p-3" type="number" placeholder="year"
+          <input className="border rounded-xl p-3" placeholder="Make (e.g., Toyota)"
+            value={car.make} onChange={(e)=>setCar({...car,make:e.target.value})}/>
+          <input className="border rounded-xl p-3" placeholder="Model (e.g., Corolla)"
+            value={car.model} onChange={(e)=>setCar({...car,model:e.target.value})}/>
+          <input className="border rounded-xl p-3" type="number" placeholder="Year"
             value={car.year} onChange={(e)=>setCar({...car,year:Number(e.target.value)})}/>
           <input className="border rounded-xl p-3" type="number" placeholder="Mileage (km)"
             value={car.mileageKm} onChange={(e)=>setCar({...car,mileageKm:Number(e.target.value)})}/>
-          <input className="border rounded-xl p-3" type="number" placeholder="price"
+          <input className="border rounded-xl p-3" placeholder="Transmission (e.g., Automatic, Manual)"
+            value={car.transmission} onChange={(e)=>setCar({...car,transmission:e.target.value})}/>
+          <input className="border rounded-xl p-3" placeholder="Fuel (e.g., Gasoline, Diesel, Electric)"
+            value={car.fuel} onChange={(e)=>setCar({...car,fuel:e.target.value})}/>
+          <input className="border rounded-xl p-3" type="number" placeholder="Price (SEK)"
             value={car.price} onChange={(e)=>setCar({...car,price:Number(e.target.value)})}/>
         </div>
 
