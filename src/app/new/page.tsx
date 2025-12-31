@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 
 // Predefined options for dropdowns - Popular brands in Sweden/Europe
 const CAR_MAKES = [
@@ -209,6 +210,15 @@ export default function NewListingPage() {
   return (
     <main className="min-h-screen p-8">
       <div className="max-w-2xl mx-auto space-y-4">
+        <div className="mb-6">
+          <Link 
+            href="/" 
+            className="inline-flex items-center gap-2 text-gray-800 hover:text-black font-medium underline decoration-1 underline-offset-2"
+          >
+            <span className="text-xl font-bold">←</span>
+            <span>Back to home</span>
+          </Link>
+        </div>
         <h1 className="text-2xl font-semibold">New listing</h1>
         
         {/* Registration Number Lookup */}
