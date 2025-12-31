@@ -73,7 +73,32 @@ export async function POST(req: NextRequest) {
           // Try multiple field names for make (some VINs use Manufacturer Name instead of Make)
           const makeValue = getValue("Make") || getValue("Manufacturer Name");
           // Clean up manufacturer name (e.g., "SUBARU CORPORATION" -> "Subaru")
-          const cleanMake = makeValue ? makeValue.replace(/\s+(CORPORATION|INC|LLC|LTD)$/i, "").trim() : null;
+          let cleanMake = null;
+          if (makeValue) {
+            // Remove common suffixes
+            cleanMake = makeValue
+              .replace(/\s+(CORPORATION|INC|LLC|LTD|COMPANY|MOTORS|AUTOMOTIVE|AUTOMOBILE)$/i, "")
+              .trim();
+            
+            // Capitalize properly (e.g., "SUBARU" -> "Subaru", "BMW" -> "BMW")
+            cleanMake = cleanMake
+              .split(/\s+/)
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+              .join(" ");
+            
+            // Special cases for known brands
+            const brandMap: { [key: string]: string } = {
+              "Subaru": "Subaru",
+              "Bmw": "BMW",
+              "Mercedes Benz": "Mercedes-Benz",
+              "Land Rover": "Land Rover",
+              "Alfa Romeo": "Alfa Romeo",
+            };
+            
+            if (brandMap[cleanMake]) {
+              cleanMake = brandMap[cleanMake];
+            }
+          }
           
           // Try multiple field names for model
           const modelValue = getValue("Model") || getValue("Series") || getValue("Series2");
@@ -84,8 +109,43 @@ export async function POST(req: NextRequest) {
             ? transmissionValue.replace("/Standard", "").replace("/Automatic", "").trim()
             : null;
           
-          // Get fuel type
-          const fuelValue = getValue("Fuel Type - Primary");
+          // Get fuel type (try multiple fields)
+          let fuelValue = getValue("Fuel Type - Primary") || getValue("Fuel Type - Secondary");
+          
+          // Map NHTSA fuel types to our dropdown values
+          if (fuelValue) {
+            const fuelMap: { [key: string]: string } = {
+              "Gasoline": "Gasoline",
+              "Diesel": "Diesel",
+              "Electric": "Electric",
+              "Hybrid": "Hybrid",
+              "Plug-in Hybrid": "Plug-in Hybrid",
+              "CNG": "CNG",
+              "LPG": "LPG",
+              "Compressed Natural Gas (CNG)": "CNG",
+              "Liquefied Petroleum Gas (LPG)": "LPG",
+            };
+            
+            // Try exact match first, then partial match
+            fuelValue = fuelMap[fuelValue] || 
+              Object.keys(fuelMap).find(key => 
+                fuelValue.toLowerCase().includes(key.toLowerCase())
+              ) || 
+              fuelValue;
+            
+            // If still not matching, try to infer from common patterns
+            if (!fuelMap[fuelValue]) {
+              if (fuelValue.toLowerCase().includes("gasoline") || fuelValue.toLowerCase().includes("petrol")) {
+                fuelValue = "Gasoline";
+              } else if (fuelValue.toLowerCase().includes("diesel")) {
+                fuelValue = "Diesel";
+              } else if (fuelValue.toLowerCase().includes("electric")) {
+                fuelValue = "Electric";
+              } else if (fuelValue.toLowerCase().includes("hybrid")) {
+                fuelValue = fuelValue.toLowerCase().includes("plug") ? "Plug-in Hybrid" : "Hybrid";
+              }
+            }
+          }
           
           // Get engine displacement
           const displacementL = getValue("Displacement (L)");
