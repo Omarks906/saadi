@@ -126,7 +126,7 @@ export default function NewListingPage() {
         const hasData = carData.make || carData.model || carData.year;
         
         if (hasData) {
-          // Real data found - populate form
+          // Real data found - populate form (only update fields that have values)
           setCar({
             ...car,
             make: carData.make || car.make,
@@ -143,10 +143,16 @@ export default function NewListingPage() {
             interiorColor: carData.interiorColor || car.interiorColor,
             trim: carData.trim || car.trim,
           });
+          
+          // Show success message
+          const successMsg = data.message || "Car data found and populated!";
           setLookupError(null);
+          
+          // Show success message briefly (optional - you could add a success state)
+          console.log("Lookup success:", successMsg, carData);
         } else {
           // No data found - show info message
-          setLookupError(data.note || "API integration needed. Please enter car details manually.");
+          setLookupError(data.note || "No vehicle data found. Please enter car details manually.");
         }
       } else {
         setLookupError("No data returned from lookup service.");

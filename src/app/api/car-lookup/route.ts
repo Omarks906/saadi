@@ -67,21 +67,49 @@ export async function POST(req: NextRequest) {
           // Extract data from NHTSA response
           const getValue = (variable: string) => {
             const item = results.find((r: any) => r.Variable === variable);
-            return item?.Value && item.Value !== "Not Applicable" ? item.Value : null;
+            return item?.Value && item.Value !== "Not Applicable" && item.Value !== null ? item.Value : null;
           };
+          
+          // Try multiple field names for make (some VINs use Manufacturer Name instead of Make)
+          const makeValue = getValue("Make") || getValue("Manufacturer Name");
+          // Clean up manufacturer name (e.g., "SUBARU CORPORATION" -> "Subaru")
+          const cleanMake = makeValue ? makeValue.replace(/\s+(CORPORATION|INC|LLC|LTD)$/i, "").trim() : null;
+          
+          // Try multiple field names for model
+          const modelValue = getValue("Model") || getValue("Series") || getValue("Series2");
+          
+          // Get transmission and clean it up
+          const transmissionValue = getValue("Transmission Style");
+          const cleanTransmission = transmissionValue 
+            ? transmissionValue.replace("/Standard", "").replace("/Automatic", "").trim()
+            : null;
+          
+          // Get fuel type
+          const fuelValue = getValue("Fuel Type - Primary");
+          
+          // Get engine displacement
+          const displacementL = getValue("Displacement (L)");
+          const displacementCC = getValue("Displacement (CC)");
+          const engineSizeValue = displacementL 
+            ? `${displacementL}L` 
+            : displacementCC 
+              ? `${(parseFloat(displacementCC) / 1000).toFixed(1)}L`
+              : null;
           
           carData = {
             ...carData,
-            make: getValue("Make") || carData.make,
-            model: getValue("Model") || carData.model,
+            make: cleanMake || carData.make,
+            model: modelValue || carData.model,
             year: getValue("Model Year") ? parseInt(getValue("Model Year")) : carData.year,
-            engineSize: getValue("Displacement (L)") ? `${getValue("Displacement (L)")}L` : carData.engineSize,
-            transmission: getValue("Transmission Style") || carData.transmission,
-            fuel: getValue("Fuel Type - Primary") || carData.fuel,
+            engineSize: engineSizeValue || carData.engineSize,
+            transmission: cleanTransmission || carData.transmission,
+            fuel: fuelValue || carData.fuel,
             doors: getValue("Doors") ? parseInt(getValue("Doors")) : carData.doors,
-            seats: getValue("Seats") ? parseInt(getValue("Seats")) : carData.seats,
-            trim: getValue("Trim") || carData.trim,
+            seats: getValue("Number of Seats") || getValue("Seats") ? parseInt(getValue("Number of Seats") || getValue("Seats")) : carData.seats,
+            trim: getValue("Trim") || getValue("Trim2") || carData.trim,
           };
+          
+          console.log("VIN decode result:", { make: cleanMake, model: modelValue, year: carData.year });
         }
       } catch (vinError) {
         console.error("VIN decode error:", vinError);
