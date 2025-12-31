@@ -61,14 +61,50 @@ export async function POST(req: NextRequest) {
         );
         const vinData = await vinResponse.json();
         
+        // Check for errors in the VIN decode
         if (vinData.Results && vinData.Results.length > 0) {
           const results = vinData.Results;
+          
+          // Check for error codes
+          const errorCodeItem = results.find((r: any) => r.Variable === "Error Code");
+          const errorTextItem = results.find((r: any) => r.Variable === "Error Text");
+          const hasErrors = errorCodeItem?.Value && errorCodeItem.Value !== "";
           
           // Extract data from NHTSA response
           const getValue = (variable: string) => {
             const item = results.find((r: any) => r.Variable === variable);
-            return item?.Value && item.Value !== "Not Applicable" && item.Value !== null ? item.Value : null;
+            return item?.Value && item.Value !== "Not Applicable" && item.Value !== null && item.Value !== "" ? item.Value : null;
           };
+          
+          // If there are errors and no data found, provide helpful message
+          if (hasErrors && !getValue("Make") && !getValue("Manufacturer Name") && !getValue("Model Year")) {
+            const errorCodes = errorCodeItem?.Value?.split(",") || [];
+            const errorText = errorTextItem?.Value || "";
+            
+            // Check if it's a "not in database" error (code 7)
+            if (errorCodes.includes("7")) {
+              return NextResponse.json({
+                success: false,
+                message: "VIN not found in US database",
+                data: carData,
+                note: "This VIN is not registered in the NHTSA (US) database. This may be a vehicle sold outside the US. Please enter car details manually, or use car.info API for Swedish/European vehicles.",
+                error: "VIN not in US database",
+                source: "vin_decoder_error",
+              });
+            }
+            
+            // Other errors (check digit, etc.)
+            if (errorCodes.includes("1") || errorCodes.length > 0) {
+              return NextResponse.json({
+                success: false,
+                message: "VIN validation error",
+                data: carData,
+                note: `VIN decode error: ${errorText || "Invalid or unrecognized VIN"}. Please verify the VIN is correct, or enter car details manually.`,
+                error: "VIN validation failed",
+                source: "vin_decoder_error",
+              });
+            }
+          }
           
           // Try multiple field names for make (some VINs use Manufacturer Name instead of Make)
           const makeValue = getValue("Make") || getValue("Manufacturer Name");
