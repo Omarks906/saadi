@@ -174,7 +174,6 @@ export default function NewListingPage() {
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-blue-900">Quick Lookup</h2>
-            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">car.info compatible</span>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
