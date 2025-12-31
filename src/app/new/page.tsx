@@ -10,6 +10,41 @@ const CAR_MAKES = [
   "Skoda", "Subaru", "Suzuki", "Tesla", "Toyota", "Volkswagen", "Volvo"
 ].sort();
 
+// Car models by make (popular models in Sweden/Europe)
+const CAR_MODELS: { [key: string]: string[] } = {
+  "Alfa Romeo": ["Giulia", "Stelvio", "Tonale", "4C", "Giulietta"],
+  "Audi": ["A3", "A4", "A5", "A6", "A7", "A8", "Q3", "Q5", "Q7", "Q8", "e-tron", "TT"],
+  "BMW": ["1 Series", "2 Series", "3 Series", "4 Series", "5 Series", "6 Series", "7 Series", "X1", "X2", "X3", "X4", "X5", "X6", "X7", "i3", "i4", "iX"],
+  "Citroën": ["C3", "C4", "C5", "Berlingo", "Cactus", "C4 Picasso"],
+  "Dacia": ["Sandero", "Duster", "Logan", "Lodgy", "Jogger"],
+  "Fiat": ["500", "Panda", "Tipo", "Punto", "500X", "500L"],
+  "Ford": ["Fiesta", "Focus", "Mondeo", "Kuga", "Edge", "Explorer", "Mustang", "Puma", "S-Max", "Galaxy"],
+  "Honda": ["Civic", "Accord", "CR-V", "HR-V", "Pilot", "Jazz", "e"],
+  "Hyundai": ["i10", "i20", "i30", "i40", "Kona", "Tucson", "Santa Fe", "Ioniq", "Ioniq 5", "Ioniq 6"],
+  "Jaguar": ["XE", "XF", "XJ", "F-Pace", "E-Pace", "I-Pace"],
+  "Jeep": ["Renegade", "Compass", "Cherokee", "Grand Cherokee", "Wrangler"],
+  "Kia": ["Picanto", "Rio", "Ceed", "Optima", "Sportage", "Sorento", "Niro", "EV6", "EV9"],
+  "Land Rover": ["Discovery", "Discovery Sport", "Range Rover", "Range Rover Sport", "Range Rover Evoque", "Defender"],
+  "Lexus": ["IS", "ES", "GS", "LS", "NX", "RX", "UX", "LC"],
+  "Mazda": ["2", "3", "6", "CX-3", "CX-5", "CX-30", "CX-60", "MX-5"],
+  "Mercedes-Benz": ["A-Class", "B-Class", "C-Class", "E-Class", "S-Class", "CLA", "CLS", "GLA", "GLB", "GLC", "GLE", "GLS", "EQC", "EQS"],
+  "Mini": ["Cooper", "Countryman", "Clubman", "Paceman"],
+  "Mitsubishi": ["Outlander", "ASX", "Eclipse Cross", "L200"],
+  "Nissan": ["Micra", "Leaf", "Juke", "Qashqai", "X-Trail", "Pathfinder", "Navara"],
+  "Opel": ["Corsa", "Astra", "Insignia", "Crossland", "Grandland", "Mokka"],
+  "Peugeot": ["108", "208", "308", "508", "2008", "3008", "5008", "Partner"],
+  "Porsche": ["911", "Boxster", "Cayman", "Panamera", "Macan", "Cayenne", "Taycan"],
+  "Renault": ["Clio", "Megane", "Scenic", "Kadjar", "Captur", "Koleos", "Zoe", "Twingo"],
+  "Seat": ["Ibiza", "Leon", "Ateca", "Tarraco", "Arona", "Formentor"],
+  "Skoda": ["Fabia", "Octavia", "Superb", "Kodiaq", "Karoq", "Kamiq", "Enyaq"],
+  "Subaru": ["Impreza", "Legacy", "Outback", "Forester", "XV", "BRZ", "Ascent"],
+  "Suzuki": ["Swift", "Vitara", "S-Cross", "Jimny", "Ignis"],
+  "Tesla": ["Model S", "Model 3", "Model X", "Model Y"],
+  "Toyota": ["Aygo", "Yaris", "Corolla", "Camry", "Prius", "RAV4", "Highlander", "Land Cruiser", "C-HR", "bZ4X"],
+  "Volkswagen": ["Polo", "Golf", "Passat", "Arteon", "Tiguan", "Touareg", "T-Cross", "T-Roc", "ID.3", "ID.4", "ID.Buzz"],
+  "Volvo": ["V40", "V60", "V90", "XC40", "XC60", "XC90", "C30", "C70", "S60", "S90", "EX30", "EX90"],
+};
+
 const TRANSMISSIONS = ["Automatic", "Manual", "CVT", "Dual Clutch", "Semi-Automatic"];
 
 const FUEL_TYPES = ["Gasoline", "Diesel", "Electric", "Hybrid", "Plug-in Hybrid", "CNG", "LPG"];
@@ -227,7 +262,9 @@ export default function NewListingPage() {
           <div className="space-y-1">
             <label className="text-sm text-gray-600">Make</label>
             <select className="border rounded-xl p-3 w-full" 
-              value={car.make} onChange={(e)=>setCar({...car,make:e.target.value})}>
+              value={car.make} onChange={(e)=>{
+                setCar({...car, make: e.target.value, model: ""}); // Reset model when make changes
+              }}>
               <option value="">Select make</option>
               {CAR_MAKES.map(make => (
                 <option key={make} value={make}>{make}</option>
