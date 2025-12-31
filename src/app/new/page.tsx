@@ -2,6 +2,26 @@
 
 import { useState } from "react";
 
+// Predefined options for dropdowns
+const CAR_MAKES = [
+  "Audi", "BMW", "Citroën", "Fiat", "Ford", "Hyundai", "Kia", "Mercedes-Benz",
+  "Nissan", "Opel", "Peugeot", "Renault", "Seat", "Skoda", "Toyota", "Volkswagen", "Volvo"
+].sort();
+
+const TRANSMISSIONS = ["Automatic", "Manual", "CVT", "Dual Clutch", "Semi-Automatic"];
+
+const FUEL_TYPES = ["Gasoline", "Diesel", "Electric", "Hybrid", "Plug-in Hybrid", "CNG", "LPG"];
+
+const CONDITIONS = ["Excellent", "Very Good", "Good", "Fair", "Poor"];
+
+const EXTERIOR_COLORS = [
+  "Black", "White", "Silver", "Gray", "Blue", "Red", "Green", "Brown", "Beige", "Gold", "Orange", "Yellow", "Other"
+];
+
+const INTERIOR_COLORS = [
+  "Black", "Beige", "Gray", "Brown", "White", "Red", "Blue", "Other"
+];
+
 export default function NewListingPage() {
   const [car, setCar] = useState({
     make: "",
@@ -74,8 +94,13 @@ export default function NewListingPage() {
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <label className="text-sm text-gray-600">Make</label>
-            <input className="border rounded-xl p-3 w-full" placeholder="e.g., Toyota"
-              value={car.make} onChange={(e)=>setCar({...car,make:e.target.value})}/>
+            <select className="border rounded-xl p-3 w-full" 
+              value={car.make} onChange={(e)=>setCar({...car,make:e.target.value})}>
+              <option value="">Select make</option>
+              {CAR_MAKES.map(make => (
+                <option key={make} value={make}>{make}</option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1">
             <label className="text-sm text-gray-600">Model</label>
@@ -94,13 +119,23 @@ export default function NewListingPage() {
           </div>
           <div className="space-y-1">
             <label className="text-sm text-gray-600">Transmission</label>
-            <input className="border rounded-xl p-3 w-full" placeholder="e.g., Automatic, Manual"
-              value={car.transmission} onChange={(e)=>setCar({...car,transmission:e.target.value})}/>
+            <select className="border rounded-xl p-3 w-full" 
+              value={car.transmission} onChange={(e)=>setCar({...car,transmission:e.target.value})}>
+              <option value="">Select transmission</option>
+              {TRANSMISSIONS.map(trans => (
+                <option key={trans} value={trans}>{trans}</option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1">
             <label className="text-sm text-gray-600">Fuel</label>
-            <input className="border rounded-xl p-3 w-full" placeholder="e.g., Gasoline, Diesel, Electric"
-              value={car.fuel} onChange={(e)=>setCar({...car,fuel:e.target.value})}/>
+            <select className="border rounded-xl p-3 w-full" 
+              value={car.fuel} onChange={(e)=>setCar({...car,fuel:e.target.value})}>
+              <option value="">Select fuel type</option>
+              {FUEL_TYPES.map(fuel => (
+                <option key={fuel} value={fuel}>{fuel}</option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1">
             <label className="text-sm text-gray-600">Price (SEK)</label>
@@ -113,13 +148,23 @@ export default function NewListingPage() {
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <label className="text-sm text-gray-600">Exterior Color</label>
-            <input className="border rounded-xl p-3 w-full" placeholder="e.g., Silver, Black"
-              value={car.exteriorColor} onChange={(e)=>setCar({...car,exteriorColor:e.target.value})}/>
+            <select className="border rounded-xl p-3 w-full" 
+              value={car.exteriorColor} onChange={(e)=>setCar({...car,exteriorColor:e.target.value})}>
+              <option value="">Select color</option>
+              {EXTERIOR_COLORS.map(color => (
+                <option key={color} value={color}>{color}</option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1">
             <label className="text-sm text-gray-600">Interior Color</label>
-            <input className="border rounded-xl p-3 w-full" placeholder="e.g., Black, Beige"
-              value={car.interiorColor} onChange={(e)=>setCar({...car,interiorColor:e.target.value})}/>
+            <select className="border rounded-xl p-3 w-full" 
+              value={car.interiorColor} onChange={(e)=>setCar({...car,interiorColor:e.target.value})}>
+              <option value="">Select color</option>
+              {INTERIOR_COLORS.map(color => (
+                <option key={color} value={color}>{color}</option>
+              ))}
+            </select>
           </div>
           <div className="space-y-1">
             <label className="text-sm text-gray-600">Trim</label>
@@ -128,8 +173,13 @@ export default function NewListingPage() {
           </div>
           <div className="space-y-1">
             <label className="text-sm text-gray-600">Condition</label>
-            <input className="border rounded-xl p-3 w-full" placeholder="e.g., Excellent, Good, Fair"
-              value={car.condition} onChange={(e)=>setCar({...car,condition:e.target.value})}/>
+            <select className="border rounded-xl p-3 w-full" 
+              value={car.condition} onChange={(e)=>setCar({...car,condition:e.target.value})}>
+              <option value="">Select condition</option>
+              {CONDITIONS.map(condition => (
+                <option key={condition} value={condition}>{condition}</option>
+              ))}
+            </select>
           </div>
         </div>
 
