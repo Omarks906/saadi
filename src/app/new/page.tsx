@@ -178,10 +178,21 @@ export default function NewListingPage() {
                 maxLength={6}/>
             </div>
             <div className="space-y-1">
-              <label className="text-sm text-gray-600">VIN (Optional)</label>
-              <input className="border rounded-xl p-3 w-full" placeholder="17-character VIN"
-                value={car.vin} onChange={(e)=>setCar({...car,vin:e.target.value.toUpperCase()})}
+              <label className="text-sm text-gray-600">
+                VIN (Optional) 
+                <span className="text-blue-600 ml-1 cursor-help" title="17-character Vehicle Identification Number. Find it on dashboard (visible through windshield), registration documents, or driver's door jamb.">
+                  ℹ️
+                </span>
+              </label>
+              <input className="border rounded-xl p-3 w-full" placeholder="17-character VIN (e.g., YV1TS61P8K1234567)"
+                value={car.vin} onChange={(e)=>setCar({...car,vin:e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '')})}
                 maxLength={17}/>
+              <p className="text-xs text-gray-500">
+                💡 Tip: VIN is on dashboard (visible through windshield), registration documents, or door jamb. 
+                <a href="/HOW_TO_FIND_VIN.md" target="_blank" className="text-blue-600 hover:underline ml-1">
+                  Learn more
+                </a>
+              </p>
             </div>
           </div>
           <button 
@@ -200,7 +211,9 @@ export default function NewListingPage() {
             </div>
           )}
           <p className="text-xs text-gray-600">
-            Enter a Swedish registration number to auto-fill car details. Integration with car.info API ready when available.
+            💡 <strong>Best results:</strong> Enter a VIN (17 characters) for real vehicle data. 
+            Registration number lookup requires car.info API integration. 
+            VIN is found on dashboard (visible through windshield), registration documents, or door jamb.
           </p>
         </div>
         
