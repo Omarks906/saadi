@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
+import fsPromises from "fs/promises";
 import path from "path";
 import { DATA_DIR } from "@/lib/paths";
 import { Call } from "@/lib/vapi-storage";
 
 export const runtime = "nodejs";
+
+async function ensureDataDir() {
+  try {
+    await fsPromises.mkdir(DATA_DIR, { recursive: true });
+  } catch {}
+}
 
 /**
  * GET /api/admin/calls
@@ -43,6 +50,9 @@ export async function GET(req: NextRequest) {
     const businessTypeFilter = searchParams.get("businessType");
     const limitParam = searchParams.get("limit");
     const limit = limitParam ? Math.min(parseInt(limitParam, 10) || 50, 1000) : 50; // Max 1000
+
+    // Ensure data directory exists
+    await ensureDataDir();
 
     // Read call files from data directory
     let callFiles: string[] = [];
