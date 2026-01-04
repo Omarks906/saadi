@@ -49,6 +49,8 @@ OPENAI_API_KEY=sk-proj-...
 REPLICATE_API_TOKEN=r8_...
 APP_PASSWORD=admin123
 APP_BASE_URL=https://your-app-name.up.railway.app
+NEXT_PUBLIC_BASE_URL=https://your-app-name.up.railway.app
+ADMIN_TOKEN=your-secure-admin-token-here
 NODE_ENV=production
 ```
 
