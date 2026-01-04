@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     // Read call files from data directory
     let callFiles: string[] = [];
     try {
-      const files = fs.readdirSync(DATA_DIR);
+      const files = await fsPromises.readdir(DATA_DIR);
       callFiles = files.filter(
         (file) => file.startsWith("call-") && file.endsWith(".json")
       );
