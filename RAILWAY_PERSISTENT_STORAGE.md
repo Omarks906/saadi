@@ -4,35 +4,56 @@
 
 Your call data is stored in the `data/` directory as JSON files. Without persistent storage, this data is **lost every time Railway redeploys** your service.
 
-## How to Set Up Persistent Storage on Railway
+## Option 1: Find Volumes in Railway (If Available)
 
-### Step 1: Create a Volume
+The Volumes tab location may vary. Try these locations:
 
-1. Go to your Railway project dashboard
-2. Click on your service (the Next.js app)
-3. Go to the **"Volumes"** tab
-4. Click **"Create Volume"**
+1. **Service Settings:**
+   - Click on your service in Railway
+   - Look for a **"Settings"** tab
+   - Check for **"Volumes"** or **"Storage"** section
 
-### Step 2: Configure the Volume
+2. **Project Settings:**
+   - Go to your Railway project
+   - Click **"Settings"** (project-level)
+   - Look for storage/volume options
 
-- **Name**: `data-storage` (or any name you prefer)
-- **Size**: Start with 1GB (you can increase later)
-- **Mount Path**: `/app/data`
+3. **Service Configuration:**
+   - Click on your service
+   - Look for tabs: "Deployments", "Metrics", "Settings", "Variables"
+   - Volumes might be under "Settings" or a separate "Storage" tab
 
-### Step 3: Create Another Volume for Uploads (Optional but Recommended)
+4. **Check Your Plan:**
+   - Volumes may require a paid plan
+   - Go to Railway → Account → Billing
+   - Check if your plan supports volumes
 
-If you also want to persist uploaded images:
+## Option 2: Use Railway PostgreSQL (Recommended - Better Solution!)
 
-- **Name**: `uploads-storage`
-- **Size**: 5GB (images take more space)
-- **Mount Path**: `/app/public/uploads`
+Instead of file storage, use Railway's built-in PostgreSQL database:
 
-### Step 4: Redeploy
+### Benefits:
+- ✅ **Free tier available** (500MB)
+- ✅ **Automatic backups**
+- ✅ **Better for production**
+- ✅ **Easier to query and analyze**
+- ✅ **No volume setup needed**
 
-After creating the volumes:
-- Railway will automatically redeploy your service
-- The `data/` directory will now persist across deployments
-- All future call data will be saved permanently
+### Quick Setup:
+1. In Railway project → Click **"New"** → **"Database"** → **"Add PostgreSQL"**
+2. Railway will create a PostgreSQL database
+3. Get the connection string from the database service
+4. Add it as `DATABASE_URL` environment variable
+5. (Requires code changes to use database instead of files)
+
+## Option 3: Accept Ephemeral Storage (For Now)
+
+If volumes aren't available and you don't want to migrate to a database yet:
+
+- **Data will be lost on redeployments** (but that's okay for testing)
+- New calls will be stored until the next deployment
+- You can still test and develop the analytics features
+- Migrate to a database when ready for production
 
 ## Verify It's Working
 
