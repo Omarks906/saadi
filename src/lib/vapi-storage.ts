@@ -24,6 +24,10 @@ export type Call = {
   startedAt: string;
   status: "started" | "ended" | "failed";
   businessType?: BusinessType | null;
+  carHits?: number;
+  restaurantHits?: number;
+  detectedFrom?: string;
+  confidence?: number;
   phoneNumber?: string;
   customerId?: string;
   metadata?: Record<string, any>;

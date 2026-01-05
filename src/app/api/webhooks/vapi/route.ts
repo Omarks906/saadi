@@ -84,25 +84,34 @@ async function handleCallStarted(event: any) {
       // - Allow: router → car or router → restaurant
       // - Disallow: car → router, restaurant → router
       // - If car ↔ restaurant conflict, keep the first and log it
-      const detectedType = detectBusinessTypeFromCall(event);
+      const detection = detectBusinessTypeFromCall(event);
       const existingType = existingCall.businessType;
       
       if (existingType === "car" || existingType === "restaurant") {
         // Don't overwrite car/restaurant with router
-        if (detectedType === "router") {
+        if (detection.businessType === "router") {
           // Keep existing type, don't overwrite
           console.log(`[VAPI Webhook] Keeping existing businessType "${existingType}" (detected "router" would overwrite)`);
-        } else if (detectedType !== existingType) {
+        } else if (detection.businessType !== existingType) {
           // Conflict: car ↔ restaurant
-          console.warn(`[VAPI Webhook] Business type conflict: existing "${existingType}" vs detected "${detectedType}". Keeping existing "${existingType}".`);
+          console.warn(`[VAPI Webhook] Business type conflict: existing "${existingType}" vs detected "${detection.businessType}". Keeping existing "${existingType}".`);
           // Keep existing type
         } else {
-          // Same type, no change needed
+          // Same type, update hit counts and confidence
+          existingCall.businessType = detection.businessType;
+          existingCall.carHits = detection.carHits;
+          existingCall.restaurantHits = detection.restaurantHits;
+          existingCall.detectedFrom = detection.detectedFrom;
+          existingCall.confidence = detection.confidence;
         }
-        // Keep existing businessType
+        // Keep existing businessType (already set above if needed)
       } else {
         // Existing type is "router" or null/undefined - allow transition to car/restaurant
-        existingCall.businessType = detectedType;
+        existingCall.businessType = detection.businessType;
+        existingCall.carHits = detection.carHits;
+        existingCall.restaurantHits = detection.restaurantHits;
+        existingCall.detectedFrom = detection.detectedFrom;
+        existingCall.confidence = detection.confidence;
       }
       
       existingCall.phoneNumber = event.call?.phoneNumber || event.phoneNumber || existingCall.phoneNumber;
@@ -120,7 +129,12 @@ async function handleCallStarted(event: any) {
     } else {
       // Create new call
       const call = createCall(event);
-      call.businessType = detectBusinessTypeFromCall(event);
+      const detection = detectBusinessTypeFromCall(event);
+      call.businessType = detection.businessType;
+      call.carHits = detection.carHits;
+      call.restaurantHits = detection.restaurantHits;
+      call.detectedFrom = detection.detectedFrom;
+      call.confidence = detection.confidence;
       updateCall(call);
       console.log("[VAPI Webhook] call.started: Created new call", call.id, "for VAPI call", callId);
       return NextResponse.json({ 

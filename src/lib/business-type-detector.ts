@@ -62,24 +62,45 @@ const RESTAURANT_KEYWORDS = [
 
 /**
  * Extract text content from call event for analysis
+ * Returns text and source information
  */
-function extractTextFromEvent(event: any): string {
+function extractTextFromEvent(event: any): { text: string; source: string } {
   const textParts: string[] = [];
+  let source = "unknown";
 
-  // Check transcript if available
-  if (event.transcript) {
-    textParts.push(event.transcript);
-  }
+  // Check transcript if available (highest priority)
   if (event.call?.transcript) {
     textParts.push(event.call.transcript);
+    source = "call.transcript";
+  } else if (event.transcript) {
+    textParts.push(event.transcript);
+    source = "transcript";
+  }
+
+  // Check summary if available
+  if (event.call?.summary) {
+    textParts.push(event.call.summary);
+    if (source === "unknown") {
+      source = "call.summary";
+    }
+  } else if (event.summary) {
+    textParts.push(event.summary);
+    if (source === "unknown") {
+      source = "summary";
+    }
   }
 
   // Check metadata
-  if (event.metadata && typeof event.metadata === "object") {
-    textParts.push(JSON.stringify(event.metadata));
-  }
   if (event.call?.metadata && typeof event.call.metadata === "object") {
     textParts.push(JSON.stringify(event.call.metadata));
+    if (source === "unknown") {
+      source = "metadata";
+    }
+  } else if (event.metadata && typeof event.metadata === "object") {
+    textParts.push(JSON.stringify(event.metadata));
+    if (source === "unknown") {
+      source = "metadata";
+    }
   }
 
   // Check phone numbers (could indicate business type)
@@ -101,7 +122,10 @@ function extractTextFromEvent(event: any): string {
     textParts.push(event.call.message);
   }
 
-  return textParts.join(" ").toLowerCase();
+  return {
+    text: textParts.join(" ").toLowerCase(),
+    source: source,
+  };
 }
 
 /**
@@ -124,29 +148,56 @@ function countKeywordMatches(text: string, keywords: string[]): number {
 }
 
 /**
- * Determine business type based on keyword analysis
- * Returns "car", "restaurant", or "router"
+ * Detection result with metadata
  */
-export function detectBusinessTypeFromCall(event: any): "car" | "restaurant" | "router" {
-  const text = extractTextFromEvent(event);
+export type BusinessTypeDetection = {
+  businessType: "car" | "restaurant" | "router";
+  carHits: number;
+  restaurantHits: number;
+  detectedFrom: string;
+  confidence: number;
+};
+
+/**
+ * Determine business type based on keyword analysis
+ * Returns business type with hit counts and confidence
+ */
+export function detectBusinessTypeFromCall(event: any): BusinessTypeDetection {
+  const { text, source } = extractTextFromEvent(event);
 
   if (!text || text.trim().length === 0) {
-    return "router";
+    return {
+      businessType: "router",
+      carHits: 0,
+      restaurantHits: 0,
+      detectedFrom: "unknown",
+      confidence: 0,
+    };
   }
 
   const carHits = countKeywordMatches(text, CAR_KEYWORDS);
   const restaurantHits = countKeywordMatches(text, RESTAURANT_KEYWORDS);
+  const confidence = Math.abs(carHits - restaurantHits);
 
   // Decision rule:
   // If car hits > restaurant hits → car
   // If restaurant hits > car hits → restaurant
   // Else → router
+  let businessType: "car" | "restaurant" | "router";
   if (carHits > restaurantHits) {
-    return "car";
+    businessType = "car";
   } else if (restaurantHits > carHits) {
-    return "restaurant";
+    businessType = "restaurant";
   } else {
-    return "router";
+    businessType = "router";
   }
+
+  return {
+    businessType,
+    carHits,
+    restaurantHits,
+    detectedFrom: source,
+    confidence,
+  };
 }
 
