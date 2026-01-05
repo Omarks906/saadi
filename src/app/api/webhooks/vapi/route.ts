@@ -160,10 +160,29 @@ async function handleCallStarted(event: any) {
           );
         } else if (detection.businessType !== existingType) {
           // Conflict: car ↔ restaurant
-          console.warn(
-            `[businessType] conflict callId=${callId} old=${existingType} new=${detection.businessType} car=${detection.carHits} rest=${detection.restaurantHits}`
-          );
-          // Keep existing type
+          // Only allow change if new classification has much higher confidence (diff ≥ 3)
+          const hitDiff = 
+            existingType === "car" 
+              ? detection.restaurantHits - detection.carHits
+              : detection.carHits - detection.restaurantHits;
+          
+          if (hitDiff >= 3) {
+            // Allow change - new classification has significantly higher confidence
+            console.log(
+              `[businessType] callId=${callId} event=${eventType} old=${existingType} new=${detection.businessType} car=${detection.carHits} rest=${detection.restaurantHits} conf=${detection.confidence} (allowed: diff=${hitDiff}>=3)`
+            );
+            existingCall.businessType = detection.businessType;
+            existingCall.carHits = detection.carHits;
+            existingCall.restaurantHits = detection.restaurantHits;
+            existingCall.detectedFrom = detection.detectedFrom;
+            existingCall.confidence = detection.confidence;
+          } else {
+            // Keep existing type - new classification doesn't have enough confidence
+            console.warn(
+              `[businessType] conflict callId=${callId} old=${existingType} new=${detection.businessType} car=${detection.carHits} rest=${detection.restaurantHits} (diff=${hitDiff}<3, keeping ${existingType})`
+            );
+            // Keep existing type
+          }
         } else {
           // Same type, update hit counts and confidence
           existingCall.businessType = detection.businessType;
