@@ -78,13 +78,7 @@ async function handleCallStarted(event: any) {
       // Update existing call
       existingCall.status = "started";
       existingCall.startedAt = event.startedAt || event.timestamp || new Date().toISOString();
-      
-      // Set businessType from assistantId mapping
-      const assistantId = extractAssistantId(event);
-      if (!assistantId) console.warn("[VAPI] assistantId missing");
-      const bt = getBusinessTypeFromAssistantId(assistantId);
-      if (assistantId && !bt) console.warn("[VAPI] assistantId not in map:", assistantId);
-      existingCall.businessType = bt ?? existingCall.businessType;
+      existingCall.businessType = "router";
       
       existingCall.phoneNumber = event.call?.phoneNumber || event.phoneNumber || existingCall.phoneNumber;
       existingCall.customerId = event.call?.customerId || event.customerId || existingCall.customerId;
@@ -101,6 +95,8 @@ async function handleCallStarted(event: any) {
     } else {
       // Create new call
       const call = createCall(event);
+      call.businessType = "router";
+      updateCall(call);
       console.log("[VAPI Webhook] call.started: Created new call", call.id, "for VAPI call", callId);
       return NextResponse.json({ 
         success: true, 
