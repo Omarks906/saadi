@@ -37,11 +37,29 @@ async function getCalls(): Promise<Call[]> {
 }
 
 export default async function DashboardPage() {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  const adminToken = process.env.ADMIN_TOKEN;
   const calls = await getCalls();
+
+  // Show configuration errors if env vars are missing
+  const hasConfigError = !baseUrl || !adminToken;
 
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-6">Calls Dashboard</h1>
+      
+      {hasConfigError && (
+        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <h2 className="text-lg font-semibold text-yellow-800 mb-2">Configuration Error</h2>
+          <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
+            {!baseUrl && <li>NEXT_PUBLIC_BASE_URL is not set in Railway environment variables</li>}
+            {!adminToken && <li>ADMIN_TOKEN is not set in Railway environment variables</li>}
+          </ul>
+          <p className="mt-3 text-sm text-yellow-700">
+            Please set these in Railway Dashboard → Your Service → Variables tab
+          </p>
+        </div>
+      )}
       
       {calls.length === 0 ? (
         <p className="text-gray-500">No calls found.</p>
