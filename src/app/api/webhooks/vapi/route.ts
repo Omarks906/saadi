@@ -79,7 +79,31 @@ async function handleCallStarted(event: any) {
       // Update existing call
       existingCall.status = "started";
       existingCall.startedAt = event.startedAt || event.timestamp || new Date().toISOString();
-      existingCall.businessType = detectBusinessTypeFromCall(event);
+      
+      // Business type transition logic:
+      // - Allow: router → car or router → restaurant
+      // - Disallow: car → router, restaurant → router
+      // - If car ↔ restaurant conflict, keep the first and log it
+      const detectedType = detectBusinessTypeFromCall(event);
+      const existingType = existingCall.businessType;
+      
+      if (existingType === "car" || existingType === "restaurant") {
+        // Don't overwrite car/restaurant with router
+        if (detectedType === "router") {
+          // Keep existing type, don't overwrite
+          console.log(`[VAPI Webhook] Keeping existing businessType "${existingType}" (detected "router" would overwrite)`);
+        } else if (detectedType !== existingType) {
+          // Conflict: car ↔ restaurant
+          console.warn(`[VAPI Webhook] Business type conflict: existing "${existingType}" vs detected "${detectedType}". Keeping existing "${existingType}".`);
+          // Keep existing type
+        } else {
+          // Same type, no change needed
+        }
+        // Keep existing businessType
+      } else {
+        // Existing type is "router" or null/undefined - allow transition to car/restaurant
+        existingCall.businessType = detectedType;
+      }
       
       existingCall.phoneNumber = event.call?.phoneNumber || event.phoneNumber || existingCall.phoneNumber;
       existingCall.customerId = event.call?.customerId || event.customerId || existingCall.customerId;
