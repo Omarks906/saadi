@@ -43,7 +43,9 @@ function markEventSeen(eventKey: string): void {
   // Limit the size to prevent memory issues (keep last 10000 events)
   if (seenEvents.size > 10000) {
     const firstKey = seenEvents.values().next().value;
-    seenEvents.delete(firstKey);
+    if (firstKey) {
+      seenEvents.delete(firstKey);
+    }
   }
   seenEvents.add(eventKey);
 }
@@ -64,7 +66,7 @@ export async function POST(req: NextRequest) {
     // Check idempotency - get callId/orderId for key generation
     const callId = body.call?.id || body.id || body.callId;
     const orderId = body.order?.id || body.id || body.orderId;
-    const eventKey = getEventKey(body, callId || orderId);
+    const eventKey = getEventKey(body, (callId || orderId) || undefined);
 
     // Skip if event already processed
     if (isEventSeen(eventKey)) {
