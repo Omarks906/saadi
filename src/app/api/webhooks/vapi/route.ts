@@ -140,6 +140,12 @@ async function handleCallStarted(event: any) {
       // Create new call
       const call = createCall(event);
       const detection = detectBusinessTypeFromCall(event);
+      const eventType = event.type || event.event || event.eventType || "call.started";
+      
+      console.log(
+        `[businessType] callId=${callId} event=${eventType} old=router new=${detection.businessType} car=${detection.carHits} rest=${detection.restaurantHits} conf=${detection.confidence}`
+      );
+      
       call.businessType = detection.businessType;
       call.carHits = detection.carHits;
       call.restaurantHits = detection.restaurantHits;
