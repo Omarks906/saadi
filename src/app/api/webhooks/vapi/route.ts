@@ -61,10 +61,29 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const eventType = body.type || body.event || body.eventType;
 
+    // Check idempotency - get callId/orderId for key generation
+    const callId = body.call?.id || body.id || body.callId;
+    const orderId = body.order?.id || body.id || body.orderId;
+    const eventKey = getEventKey(body, callId || orderId);
+
+    // Skip if event already processed
+    if (isEventSeen(eventKey)) {
+      console.log(`[VAPI Webhook] Duplicate event detected, skipping: ${eventKey}`);
+      return NextResponse.json({
+        success: true,
+        message: "Event already processed",
+        eventKey,
+      });
+    }
+
     console.log("[VAPI Webhook] Received event:", eventType, {
       timestamp: new Date().toISOString(),
+      eventKey,
       body: JSON.stringify(body, null, 2),
     });
+
+    // Mark event as seen before processing
+    markEventSeen(eventKey);
 
     // Handle call.started event
     if (eventType === "call.started" || body.event === "call.started") {
