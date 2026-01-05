@@ -61,10 +61,18 @@ export async function GET(req: NextRequest) {
       callFiles = files.filter(
         (file) => file.startsWith("call-") && file.endsWith(".json")
       );
-    } catch (error) {
+      console.log(`[Admin] Found ${callFiles.length} call files in ${DATA_DIR}`);
+    } catch (error: any) {
       console.error("[Admin] Error reading data directory:", error);
+      console.error("[Admin] DATA_DIR path:", DATA_DIR);
+      console.error("[Admin] Directory exists:", fs.existsSync(DATA_DIR));
       return NextResponse.json(
-        { error: "Failed to read data directory" },
+        { 
+          error: "Failed to read data directory",
+          details: error?.message,
+          dataDir: DATA_DIR,
+          exists: fs.existsSync(DATA_DIR)
+        },
         { status: 500 }
       );
     }
