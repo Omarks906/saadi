@@ -46,7 +46,15 @@ export default async function DashboardPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6">Calls Dashboard</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Calls Dashboard</h1>
+        <Link
+          href="/dashboard/analytics"
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+        >
+          View Analytics
+        </Link>
+      </div>
       
       {hasConfigError && (
         <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
