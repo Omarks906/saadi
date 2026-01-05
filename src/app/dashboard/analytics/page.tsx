@@ -38,6 +38,9 @@ function formatDuration(seconds: number | null): string {
 export default async function AnalyticsPage() {
   const analytics = await getAnalytics();
 
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  const adminToken = process.env.ADMIN_TOKEN;
+
   if (!analytics) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -48,7 +51,27 @@ export default async function AnalyticsPage() {
           ← Back to Dashboard
         </Link>
         <h1 className="text-3xl font-bold mb-4">Analytics</h1>
-        <p className="text-gray-500">Unable to load analytics. Please check environment variables.</p>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+          <h2 className="text-lg font-semibold text-yellow-800 mb-2">Configuration Error</h2>
+          <p className="text-sm text-yellow-700 mb-4">
+            Unable to load analytics. Please check the following environment variables in Railway:
+          </p>
+          <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
+            {!baseUrl && (
+              <li>
+                <code className="bg-yellow-100 px-1 rounded">NEXT_PUBLIC_BASE_URL</code> - Your Railway app URL (e.g., https://saadi-production.up.railway.app)
+              </li>
+            )}
+            {!adminToken && (
+              <li>
+                <code className="bg-yellow-100 px-1 rounded">ADMIN_TOKEN</code> - Admin authentication token
+              </li>
+            )}
+          </ul>
+          <p className="text-sm text-yellow-700 mt-4">
+            After setting these variables, redeploy your Railway service for the changes to take effect.
+          </p>
+        </div>
       </div>
     );
   }
