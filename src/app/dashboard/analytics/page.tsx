@@ -5,11 +5,18 @@ async function getAnalytics() {
   const adminToken = process.env.ADMIN_TOKEN;
 
   if (!baseUrl || !adminToken) {
+    console.error("[Analytics] Missing env vars:", { 
+      hasBaseUrl: !!baseUrl, 
+      hasAdminToken: !!adminToken 
+    });
     return null;
   }
 
   try {
-    const response = await fetch(`${baseUrl}/api/admin/analytics`, {
+    const url = `${baseUrl}/api/admin/analytics`;
+    console.log("[Analytics] Fetching from:", url);
+    
+    const response = await fetch(url, {
       headers: {
         "x-admin-token": adminToken,
       },
@@ -17,14 +24,16 @@ async function getAnalytics() {
     });
 
     if (!response.ok) {
-      console.error(`[Dashboard] Failed to fetch analytics: ${response.status}`);
-      return null;
+      const errorText = await response.text();
+      console.error(`[Analytics] Failed to fetch: ${response.status}`, errorText);
+      return { error: `API returned ${response.status}: ${errorText}` };
     }
 
-    return await response.json();
-  } catch (error) {
-    console.error("[Dashboard] Error fetching analytics:", error);
-    return null;
+    const data = await response.json();
+    return data;
+  } catch (error: any) {
+    console.error("[Analytics] Error fetching analytics:", error);
+    return { error: error?.message || "Network error" };
   }
 }
 
@@ -40,6 +49,30 @@ export default async function AnalyticsPage() {
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const adminToken = process.env.ADMIN_TOKEN;
+
+  // Check if analytics returned an error object
+  if (analytics && 'error' in analytics) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <Link
+          href="/dashboard"
+          className="text-blue-600 hover:text-blue-800 underline mb-4 inline-block"
+        >
+          ← Back to Dashboard
+        </Link>
+        <h1 className="text-3xl font-bold mb-4">Analytics</h1>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <h2 className="text-lg font-semibold text-red-800 mb-2">API Error</h2>
+          <p className="text-sm text-red-700">
+            Failed to fetch analytics: {analytics.error}
+          </p>
+          <p className="text-sm text-red-600 mt-2">
+            Check server logs for more details.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!analytics) {
     return (
