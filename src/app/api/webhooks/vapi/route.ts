@@ -431,7 +431,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ 
     status: "ok", 
     service: "VAPI Webhook Handler",
-    supportedEvents: ["call.started", "order.confirmed"],
+    supportedEvents: ["call.started", "call.ended", "order.confirmed"],
     timestamp: new Date().toISOString()
   });
 }
