@@ -84,6 +84,12 @@ export default async function DashboardPage() {
                   Phone Number
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+                  Duration
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
+                  Confidence
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">
                   Created At
                 </th>
               </tr>
@@ -130,6 +136,30 @@ export default async function DashboardPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {call.phoneNumber || "N/A"}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {call.durationSeconds !== undefined && call.durationSeconds !== null
+                      ? `${Math.floor(call.durationSeconds / 60)}m ${call.durationSeconds % 60}s`
+                      : call.status === "ended"
+                      ? "N/A"
+                      : "—"}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {call.confidence !== undefined && call.confidence !== null ? (
+                      <span
+                        className={`px-2 py-1 text-xs font-semibold rounded ${
+                          call.confidence >= 5
+                            ? "bg-green-100 text-green-800"
+                            : call.confidence >= 3
+                            ? "bg-yellow-100 text-yellow-800"
+                            : "bg-gray-100 text-gray-800"
+                        }`}
+                      >
+                        {call.confidence}
+                      </span>
+                    ) : (
+                      "N/A"
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {call.createdAt

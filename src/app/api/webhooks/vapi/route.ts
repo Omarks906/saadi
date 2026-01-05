@@ -92,6 +92,11 @@ export async function POST(req: NextRequest) {
       return handleCallStarted(body);
     }
 
+    // Handle call.ended event
+    if (eventType === "call.ended" || body.event === "call.ended") {
+      return handleCallEnded(body);
+    }
+
     // Handle order.confirmed event
     if (eventType === "order.confirmed" || body.event === "order.confirmed") {
       return handleOrderConfirmed(body);
@@ -245,6 +250,100 @@ async function handleCallStarted(event: any) {
     console.error("[VAPI Webhook] call.started: Error:", error);
     return NextResponse.json(
       { success: false, error: error?.message || "Failed to process call.started" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Handle call.ended event
+ */
+async function handleCallEnded(event: any) {
+  try {
+    const callId = event.call?.id || event.id || event.callId;
+    
+    if (!callId) {
+      console.error("[VAPI Webhook] call.ended: Missing call ID");
+      return NextResponse.json(
+        { success: false, error: "Missing call ID" },
+        { status: 400 }
+      );
+    }
+
+    // Find existing call
+    const existingCall = findCallByCallId(callId);
+    
+    if (!existingCall) {
+      console.warn("[VAPI Webhook] call.ended: Call not found", callId);
+      return NextResponse.json(
+        { success: false, error: "Call not found" },
+        { status: 404 }
+      );
+    }
+
+    // Update call with ended status
+    existingCall.status = "ended";
+    existingCall.endedAt = event.endedAt || event.timestamp || new Date().toISOString();
+    
+    // Calculate duration
+    if (existingCall.startedAt && existingCall.endedAt) {
+      const startTime = new Date(existingCall.startedAt).getTime();
+      const endTime = new Date(existingCall.endedAt).getTime();
+      existingCall.durationSeconds = Math.floor((endTime - startTime) / 1000);
+    }
+
+    // Update business type if new detection is available (with same rules)
+    const detection = detectBusinessTypeFromCall(event);
+    const existingType = existingCall.businessType || "router";
+    const eventType = event.type || event.event || event.eventType || "call.ended";
+    
+    if (existingType === "car" || existingType === "restaurant") {
+      if (detection.businessType === "router") {
+        // Keep existing type
+      } else if (detection.businessType !== existingType) {
+        // Conflict: car ↔ restaurant - check confidence threshold
+        const hitDiff = 
+          existingType === "car" 
+            ? detection.restaurantHits - detection.carHits
+            : detection.carHits - detection.restaurantHits;
+        
+        if (hitDiff >= 3) {
+          // Allow change
+          existingCall.businessType = detection.businessType;
+          existingCall.carHits = detection.carHits;
+          existingCall.restaurantHits = detection.restaurantHits;
+          existingCall.detectedFrom = detection.detectedFrom;
+          existingCall.confidence = detection.confidence;
+        }
+        // Otherwise keep existing
+      } else {
+        // Same type, update metadata
+        existingCall.carHits = detection.carHits;
+        existingCall.restaurantHits = detection.restaurantHits;
+        existingCall.detectedFrom = detection.detectedFrom;
+        existingCall.confidence = detection.confidence;
+      }
+    } else {
+      // Existing type is router - allow transition
+      existingCall.businessType = detection.businessType;
+      existingCall.carHits = detection.carHits;
+      existingCall.restaurantHits = detection.restaurantHits;
+      existingCall.detectedFrom = detection.detectedFrom;
+      existingCall.confidence = detection.confidence;
+    }
+
+    updateCall(existingCall);
+    console.log("[VAPI Webhook] call.ended: Updated call", callId, "duration:", existingCall.durationSeconds, "seconds");
+    return NextResponse.json({ 
+      success: true, 
+      message: "Call ended",
+      callId: existingCall.id,
+      duration: existingCall.durationSeconds 
+    });
+  } catch (error: any) {
+    console.error("[VAPI Webhook] call.ended: Error:", error);
+    return NextResponse.json(
+      { success: false, error: error?.message || "Failed to process call.ended" },
       { status: 500 }
     );
   }

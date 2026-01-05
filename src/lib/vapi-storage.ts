@@ -22,6 +22,8 @@ export type Call = {
   callId: string; // VAPI call ID
   createdAt: string;
   startedAt: string;
+  endedAt?: string;
+  durationSeconds?: number; // Calculated duration in seconds
   status: "started" | "ended" | "failed";
   businessType?: BusinessType | null;
   carHits?: number;
