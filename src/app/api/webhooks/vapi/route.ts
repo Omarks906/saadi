@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createCall, findCallByCallId, updateCall, extractAssistantId } from "@/lib/vapi-storage";
 import { createOrder, findOrderByOrderId, updateOrder } from "@/lib/vapi-storage";
 import { getBusinessTypeFromAssistantId } from "@/lib/vapi-assistant-map";
+import { detectBusinessTypeFromCall } from "@/lib/business-type-detector";
 
 export const runtime = "nodejs";
 
@@ -78,7 +79,7 @@ async function handleCallStarted(event: any) {
       // Update existing call
       existingCall.status = "started";
       existingCall.startedAt = event.startedAt || event.timestamp || new Date().toISOString();
-      existingCall.businessType = "router";
+      existingCall.businessType = detectBusinessTypeFromCall(event);
       
       existingCall.phoneNumber = event.call?.phoneNumber || event.phoneNumber || existingCall.phoneNumber;
       existingCall.customerId = event.call?.customerId || event.customerId || existingCall.customerId;
@@ -95,7 +96,7 @@ async function handleCallStarted(event: any) {
     } else {
       // Create new call
       const call = createCall(event);
-      call.businessType = "router";
+      call.businessType = detectBusinessTypeFromCall(event);
       updateCall(call);
       console.log("[VAPI Webhook] call.started: Created new call", call.id, "for VAPI call", callId);
       return NextResponse.json({ 
