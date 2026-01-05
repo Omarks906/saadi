@@ -7,6 +7,48 @@ import { detectBusinessTypeFromCall } from "@/lib/business-type-detector";
 export const runtime = "nodejs";
 
 /**
+ * In-memory store for seen events to prevent duplicate processing
+ * Keyed by: event.id or ${event.type}:${callId}:${timestamp}
+ */
+const seenEvents = new Set<string>();
+
+/**
+ * Generate a stable key for an event to check idempotency
+ */
+function getEventKey(event: any, callId?: string): string {
+  // Use event.id if present (most reliable)
+  if (event.id) {
+    return event.id;
+  }
+  
+  // Fallback to composite key
+  const eventType = event.type || event.event || event.eventType || "unknown";
+  const timestamp = event.timestamp || event.createdAt || event.startedAt || Date.now().toString();
+  const id = callId || event.call?.id || event.order?.id || "unknown";
+  
+  return `${eventType}:${id}:${timestamp}`;
+}
+
+/**
+ * Check if an event has already been processed
+ */
+function isEventSeen(eventKey: string): boolean {
+  return seenEvents.has(eventKey);
+}
+
+/**
+ * Mark an event as seen
+ */
+function markEventSeen(eventKey: string): void {
+  // Limit the size to prevent memory issues (keep last 10000 events)
+  if (seenEvents.size > 10000) {
+    const firstKey = seenEvents.values().next().value;
+    seenEvents.delete(firstKey);
+  }
+  seenEvents.add(eventKey);
+}
+
+/**
  * VAPI Webhook Handler
  * Handles events from VAPI (Voice AI Platform)
  * 
