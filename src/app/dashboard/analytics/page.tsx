@@ -1,15 +1,37 @@
 import Link from "next/link";
 
 async function getAnalytics() {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
-  const adminToken = process.env.ADMIN_TOKEN;
+  let baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.trim();
+  let adminToken = process.env.ADMIN_TOKEN?.trim();
+
+  // Validate and clean baseUrl - ensure it's just the URL
+  if (baseUrl) {
+    // Remove any trailing whitespace or newlines
+    baseUrl = baseUrl.split('\n')[0].split(' ')[0].trim();
+    // Remove trailing slash if present
+    baseUrl = baseUrl.replace(/\/$/, '');
+  }
+
+  // Validate adminToken - ensure it's just the token
+  if (adminToken) {
+    // Remove any trailing whitespace or newlines
+    adminToken = adminToken.split('\n')[0].split(' ')[0].trim();
+  }
 
   if (!baseUrl || !adminToken) {
     console.error("[Analytics] Missing env vars:", { 
       hasBaseUrl: !!baseUrl, 
-      hasAdminToken: !!adminToken 
+      hasAdminToken: !!adminToken,
+      baseUrlLength: baseUrl?.length,
+      adminTokenLength: adminToken?.length
     });
     return null;
+  }
+
+  // Additional validation: ensure baseUrl looks like a URL
+  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+    console.error("[Analytics] Invalid baseUrl format:", baseUrl);
+    return { error: `Invalid NEXT_PUBLIC_BASE_URL format. Must start with http:// or https://` };
   }
 
   try {
