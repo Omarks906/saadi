@@ -69,7 +69,15 @@ export async function POST(req: NextRequest) {
     const eventType = body.type || body.event || body.eventType || body.message?.type;
 
     // Check idempotency - get callId/orderId for key generation
-    const callId = body.call?.id || body.id || body.callId;
+    // VAPI sends call ID in various locations depending on event type
+    const callId = body.call?.id || 
+                   body.id || 
+                   body.callId || 
+                   body.callId || 
+                   body.message?.call?.id ||
+                   body.message?.callId ||
+                   body.statusUpdate?.call?.id ||
+                   body.endOfCallReport?.call?.id;
     const orderId = body.order?.id || body.id || body.orderId;
     const eventKey = getEventKey(body, (callId || orderId) || undefined);
 
@@ -96,6 +104,46 @@ export async function POST(req: NextRequest) {
 
     // Mark event as seen before processing
     markEventSeen(eventKey);
+
+    // Handle status-update events (VAPI sends these for call state changes)
+    if (eventType === "status-update" || body.message?.type === "status-update") {
+      const statusUpdate = body.statusUpdate || body.message?.statusUpdate || body;
+      const status = statusUpdate.status || body.status || body.message?.status;
+      const callId = statusUpdate.call?.id || body.call?.id || body.id || body.message?.call?.id;
+      
+      if (callId && (status === "started" || status === "ringing" || status === "answered")) {
+        return handleCallStarted({
+          ...body,
+          call: { ...body.call, ...statusUpdate.call, id: callId },
+          type: "call.started",
+        });
+      }
+      
+      if (callId && (status === "ended" || status === "ended-by-user" || status === "ended-by-system")) {
+        return handleCallEnded({
+          ...body,
+          call: { ...body.call, ...statusUpdate.call, id: callId },
+          type: "call.ended",
+        });
+      }
+    }
+
+    // Handle end-of-call-report (VAPI sends this at the end of calls)
+    if (eventType === "end-of-call-report" || body.message?.type === "end-of-call-report") {
+      const report = body.endOfCallReport || body.message?.endOfCallReport || body;
+      const callId = report.call?.id || report.id || body.id || body.message?.call?.id;
+      
+      if (callId) {
+        // Create or update call with end-of-call report data
+        return handleCallEnded({
+          ...body,
+          call: { ...report.call, id: callId },
+          type: "call.ended",
+          endedAt: report.endedAt || report.endTime || new Date().toISOString(),
+          startedAt: report.startedAt || report.startTime,
+        });
+      }
+    }
 
     // Handle call.started event (multiple possible formats)
     if (
