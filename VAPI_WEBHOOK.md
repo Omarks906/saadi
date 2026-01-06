@@ -150,11 +150,29 @@ Returns:
 
 ## Usage in VAPI Dashboard
 
+VAPI uses "Server URL" instead of "Webhooks". Configure it at the **Assistant level**:
+
 1. Go to your VAPI dashboard
-2. Navigate to Webhooks settings
-3. Add webhook URL: `https://your-app-url.com/api/webhooks/vapi`
-4. Select events: `call.started`, `order.confirmed`
-5. Save configuration
+2. Navigate to **"Assistants"** section (in the left sidebar)
+3. Click on the assistant you want to configure
+4. Go to the **"Advanced"** tab
+5. Scroll down to the **"Server"** section
+6. Enter your webhook URL in the **"Server URL"** field:
+   ```
+   https://saadi-production.up.railway.app/api/webhooks/vapi
+   ```
+7. Select the server messages/events you want to receive:
+   - `call.started`
+   - `call.ended` 
+   - `order.confirmed`
+8. **Save** your changes
+
+**Note:** You can also set the Server URL at:
+- Organization level (applies to all assistants)
+- Phone number level
+- Function call level
+
+For more details, see: https://docs.vapi.ai/server-url/setting-server-urls
 
 ## Testing
 
