@@ -97,31 +97,52 @@ export async function POST(req: NextRequest) {
     // Mark event as seen before processing
     markEventSeen(eventKey);
 
-    // Handle call.started event
-    if (eventType === "call.started" || body.event === "call.started") {
+    // Handle call.started event (multiple possible formats)
+    if (
+      eventType === "call.started" || 
+      eventType === "call-start" ||
+      body.event === "call.started" ||
+      body.message?.type === "call.started" ||
+      (body.status === "started" && body.call)
+    ) {
       return handleCallStarted(body);
     }
 
-    // Handle call.ended event
-    if (eventType === "call.ended" || body.event === "call.ended") {
+    // Handle call.ended event (multiple possible formats)
+    if (
+      eventType === "call.ended" || 
+      eventType === "call-end" ||
+      body.event === "call.ended" ||
+      body.message?.type === "call.ended" ||
+      (body.status === "ended" && body.call)
+    ) {
       return handleCallEnded(body);
     }
 
-    // Handle order.confirmed event
-    if (eventType === "order.confirmed" || body.event === "order.confirmed") {
+    // Handle order.confirmed event (multiple possible formats)
+    if (
+      eventType === "order.confirmed" || 
+      eventType === "order-confirmed" ||
+      body.event === "order.confirmed" ||
+      body.message?.type === "order.confirmed"
+    ) {
       return handleOrderConfirmed(body);
     }
 
-    // Unknown event type
-    console.warn("[VAPI Webhook] Unknown event type:", eventType);
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: `Unknown event type: ${eventType}`,
-        received: eventType 
-      },
-      { status: 400 }
-    );
+    // VAPI sends many message types (transcript, function-call, etc.)
+    // Only log unknown types that might be call events, and return success for others
+    if (eventType && (eventType.includes("status") || eventType.includes("call"))) {
+      console.warn("[VAPI Webhook] Unhandled call-related event:", eventType, "messageType:", body.message?.type);
+    }
+    
+    // Return success for non-call events (transcripts, messages, function-calls, etc.)
+    // VAPI sends many events we don't need to process
+    return NextResponse.json({
+      success: true,
+      message: "Event received but not processed",
+      eventType: eventType || "unknown",
+      note: "This event type is not handled by the webhook"
+    });
   } catch (error: any) {
     console.error("[VAPI Webhook] Error processing webhook:", error);
     return NextResponse.json(
