@@ -83,7 +83,15 @@ export function createCall(event: any): Call {
     metadata: event.call?.metadata || event.metadata,
     rawEvent: event,
   };
-  fs.writeFileSync(callPath(id), JSON.stringify(call, null, 2), "utf-8");
+  
+  const filePath = callPath(id);
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(call, null, 2), "utf-8");
+    console.log(`[VAPI Storage] Created call file: ${filePath} (callId: ${call.callId})`);
+  } catch (error: any) {
+    console.error(`[VAPI Storage] Failed to write call file ${filePath}:`, error);
+    throw error;
+  }
   return call;
 }
 
