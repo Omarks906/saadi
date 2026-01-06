@@ -92,15 +92,27 @@ export async function POST(req: NextRequest) {
     }
 
     // Reduced logging to avoid Railway rate limits
-    console.log("[VAPI Webhook] Received event:", eventType || "unknown", {
-      timestamp: new Date().toISOString(),
-      eventKey,
-      hasType: !!body.type,
-      hasEvent: !!body.event,
-      hasEventType: !!body.eventType,
-      messageType: body.message?.type,
-      callId: body.call?.id || body.id,
-    });
+    // For status-update and end-of-call-report, log more details to debug call ID location
+    if (eventType === "status-update" || eventType === "end-of-call-report") {
+      console.log("[VAPI Webhook] Received event:", eventType, {
+        timestamp: new Date().toISOString(),
+        callIdLocations: {
+          bodyId: body.id,
+          bodyCallId: body.call?.id,
+          messageCallId: body.message?.call?.id,
+          statusUpdateCallId: body.statusUpdate?.call?.id,
+          endOfCallReportCallId: body.endOfCallReport?.call?.id,
+        },
+        extractedCallId: callId,
+      });
+    } else {
+      console.log("[VAPI Webhook] Received event:", eventType || "unknown", {
+        timestamp: new Date().toISOString(),
+        eventKey,
+        messageType: body.message?.type,
+        callId: callId || "undefined",
+      });
+    }
 
     // Mark event as seen before processing
     markEventSeen(eventKey);
