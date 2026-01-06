@@ -43,7 +43,7 @@ function markEventSeen(eventKey: string): void {
   // Limit the size to prevent memory issues (keep last 10000 events)
   if (seenEvents.size > 10000) {
     const firstKey = seenEvents.values().next().value;
-    if (firstKey) {
+    if (firstKey !== undefined) {
       seenEvents.delete(firstKey);
     }
   }
