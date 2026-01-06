@@ -61,7 +61,12 @@ function markEventSeen(eventKey: string): void {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const eventType = body.type || body.event || body.eventType;
+    // VAPI sends events in different formats:
+    // - body.type (standard)
+    // - body.event (alternative)
+    // - body.eventType (alternative)
+    // - body.message.type (VAPI message format)
+    const eventType = body.type || body.event || body.eventType || body.message?.type;
 
     // Check idempotency - get callId/orderId for key generation
     const callId = body.call?.id || body.id || body.callId;
@@ -78,10 +83,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    console.log("[VAPI Webhook] Received event:", eventType, {
+    // Reduced logging to avoid Railway rate limits
+    console.log("[VAPI Webhook] Received event:", eventType || "unknown", {
       timestamp: new Date().toISOString(),
       eventKey,
-      body: JSON.stringify(body, null, 2),
+      hasType: !!body.type,
+      hasEvent: !!body.event,
+      hasEventType: !!body.eventType,
+      messageType: body.message?.type,
+      callId: body.call?.id || body.id,
     });
 
     // Mark event as seen before processing
