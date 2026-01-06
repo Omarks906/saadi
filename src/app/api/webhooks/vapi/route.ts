@@ -121,38 +121,74 @@ export async function POST(req: NextRequest) {
     if (eventType === "status-update" || body.message?.type === "status-update") {
       const statusUpdate = body.statusUpdate || body.message?.statusUpdate || body;
       const status = statusUpdate.status || body.status || body.message?.status;
-      const callId = statusUpdate.call?.id || body.call?.id || body.id || body.message?.call?.id;
+      // Extract call ID from message.call.id (VAPI format)
+      const callId = body.message?.call?.id || statusUpdate.call?.id || body.call?.id || body.id;
       
-      if (callId && (status === "started" || status === "ringing" || status === "answered")) {
-        return handleCallStarted({
-          ...body,
-          call: { ...body.call, ...statusUpdate.call, id: callId },
-          type: "call.started",
-        });
-      }
-      
-      if (callId && (status === "ended" || status === "ended-by-user" || status === "ended-by-system")) {
-        return handleCallEnded({
-          ...body,
-          call: { ...body.call, ...statusUpdate.call, id: callId },
-          type: "call.ended",
-        });
+      if (callId) {
+        if (status === "started" || status === "ringing" || status === "answered" || status === "in-progress") {
+          return handleCallStarted({
+            ...body,
+            call: { 
+              ...body.call, 
+              ...statusUpdate.call, 
+              ...body.message?.call,
+              id: callId 
+            },
+            type: "call.started",
+          });
+        }
+        
+        if (status === "ended" || status === "ended-by-user" || status === "ended-by-system" || status === "completed") {
+          return handleCallEnded({
+            ...body,
+            call: { 
+              ...body.call, 
+              ...statusUpdate.call,
+              ...body.message?.call,
+              id: callId 
+            },
+            type: "call.ended",
+          });
+        }
       }
     }
 
     // Handle end-of-call-report (VAPI sends this at the end of calls)
     if (eventType === "end-of-call-report" || body.message?.type === "end-of-call-report") {
       const report = body.endOfCallReport || body.message?.endOfCallReport || body;
-      const callId = report.call?.id || report.id || body.id || body.message?.call?.id;
+      // Extract call ID from message.call.id (VAPI format)
+      const callId = body.message?.call?.id || report.call?.id || report.id || body.id;
       
       if (callId) {
-        // Create or update call with end-of-call report data
+        // Check if call exists, if not create it first
+        let existingCall = findCallByCallId(callId);
+        
+        if (!existingCall) {
+          // Create call first with available data
+          const newCall = createCall({
+            call: { 
+              id: callId,
+              ...body.message?.call,
+              ...report.call 
+            },
+            type: "call.started",
+            startedAt: report.startedAt || report.startTime || report.createdAt || new Date().toISOString(),
+          });
+          existingCall = newCall;
+        }
+        
+        // Now update it with end-of-call report data
         return handleCallEnded({
           ...body,
-          call: { ...report.call, id: callId },
+          call: { 
+            ...existingCall,
+            ...report.call,
+            ...body.message?.call,
+            id: callId 
+          },
           type: "call.ended",
           endedAt: report.endedAt || report.endTime || new Date().toISOString(),
-          startedAt: report.startedAt || report.startTime,
+          startedAt: report.startedAt || report.startTime || existingCall.startedAt,
         });
       }
     }

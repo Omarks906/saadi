@@ -115,6 +115,9 @@ export function updateCall(call: Call) {
  */
 export function findCallByCallId(callId: string): Call | null {
   try {
+    // Ensure data directory exists
+    ensureDirs();
+    
     const files = fs.readdirSync(DATA_DIR);
     for (const file of files) {
       if (file.startsWith("call-") && file.endsWith(".json")) {
