@@ -210,8 +210,8 @@ export default async function AnalyticsPage() {
       {/* Confidence Statistics */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
         <h2 className="text-lg font-semibold mb-4">Confidence Statistics</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {(["car", "restaurant", "router"] as const).map((type) => {
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {(["car", "restaurant", "router", "other"] as const).map((type) => {
             const stats = analytics.confidence[type];
             return (
               <div key={type} className="border border-gray-200 rounded p-4">

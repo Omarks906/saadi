@@ -18,10 +18,10 @@ export async function GET(
     // Try to find by internal ID first
     let call;
     try {
-      call = readCall(callId);
+      call = await readCall(callId);
     } catch {
       // If not found by internal ID, try to find by VAPI callId
-      call = findCallByCallId(callId);
+      call = await findCallByCallId(callId);
     }
 
     if (!call) {

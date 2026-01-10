@@ -1,0 +1,39 @@
+{
+  "name": "Router Assistant",
+  "model": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "temperature": 0.7,
+    "maxTokens": 1000
+  },
+  "voice": {
+    "provider": "11labs",
+    "voiceId": "your-voice-id",
+    "stability": 0.5,
+    "similarityBoost": 0.75
+  },
+  "firstMessage": "Hello! I'm here to help you. Are you calling about a car listing or a restaurant?",
+  "systemPrompt": "You are a helpful router assistant. Your job is to determine if the caller is interested in:\n1. Car listings (selling/buying a car, vehicle information)\n2. Restaurant services (ordering food, reservations, menu questions)\n\nAsk one clarifying question if needed, then route to the appropriate domain assistant. Keep responses brief and natural.",
+  "serverUrl": "https://saadi-production.up.railway.app/api/webhooks/vapi",
+  "serverUrlSecret": null,
+  "functions": [],
+  "tools": [],
+  "endCallFunctionEnabled": false,
+  "recordingEnabled": true,
+  "silenceTimeoutSeconds": 30,
+  "responseDelaySeconds": 0.4,
+  "enableVoicemailDetection": false,
+  "voicemailMessage": "",
+  "voicemailDetectionModel": null,
+  "backchannellingEnabled": false,
+  "backchannellingPrompt": null,
+  "backchannellingModel": null,
+  "webhookUrl": null,
+  "webhookUrlSecret": null,
+  "maxDurationSeconds": 600,
+  "assistantId": "your-router-assistant-id-here",
+  "metadata": {
+    "businessType": "router"
+  }
+}
+

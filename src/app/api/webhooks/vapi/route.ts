@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createCall, findCallByCallId, updateCall, extractAssistantId } from "@/lib/vapi-storage";
 import { createOrder, findOrderByOrderId, updateOrder } from "@/lib/vapi-storage";
 import { getBusinessTypeFromAssistantId } from "@/lib/vapi-assistant-map";
-import { detectBusinessTypeFromCall } from "@/lib/business-type-detector";
+import { detectBusinessTypeFromCall, shouldSwitch } from "@/lib/business-type-detector";
 
 export const runtime = "nodejs";
 
@@ -161,11 +161,11 @@ export async function POST(req: NextRequest) {
       
       if (callId) {
         // Check if call exists, if not create it first
-        let existingCall = findCallByCallId(callId);
+        let existingCall = await findCallByCallId(callId);
         
         if (!existingCall) {
           // Create call first with available data
-          const newCall = createCall({
+          const newCall = await createCall({
             call: { 
               id: callId,
               ...body.message?.call,
@@ -268,81 +268,45 @@ async function handleCallStarted(event: any) {
     }
 
     // Check if call already exists
-    let existingCall = findCallByCallId(callId);
+    let existingCall = await findCallByCallId(callId);
     
     if (existingCall) {
       // Update existing call
       existingCall.status = "started";
       existingCall.startedAt = event.startedAt || event.timestamp || new Date().toISOString();
       
-      // Business type transition logic:
-      // - Allow: router → car or router → restaurant
-      // - Disallow: car → router, restaurant → router
-      // - If car ↔ restaurant conflict, keep the first and log it
+      // Business type transition logic using scoring system
       const detection = detectBusinessTypeFromCall(event);
       const existingType = existingCall.businessType || "router";
       const eventType = event.type || event.event || event.eventType || "unknown";
       
-      if (existingType === "car" || existingType === "restaurant") {
-        // Don't overwrite car/restaurant with router
-        if (detection.businessType === "router") {
-          // Keep existing type, don't overwrite
+      if (shouldSwitch(existingType, detection.businessType, detection.scores)) {
+        // Allow switch - update business type and scores
+        if (existingType !== detection.businessType) {
           console.log(
-            `[businessType] prevent overwrite callId=${callId} event=${eventType} old=${existingType} new=router`
-          );
-        } else if (detection.businessType !== existingType) {
-          // Conflict: car ↔ restaurant
-          // Only allow change if new classification has much higher confidence (diff ≥ 3)
-          const hitDiff = 
-            existingType === "car" 
-              ? detection.restaurantHits - detection.carHits
-              : detection.carHits - detection.restaurantHits;
-          
-          if (hitDiff >= 3) {
-            // Allow change - new classification has significantly higher confidence
-            console.log(
-              `[businessType] callId=${callId} event=${eventType} old=${existingType} new=${detection.businessType} car=${detection.carHits} rest=${detection.restaurantHits} conf=${detection.confidence} (allowed: diff=${hitDiff}>=3)`
-            );
-            existingCall.businessType = detection.businessType;
-            existingCall.carHits = detection.carHits;
-            existingCall.restaurantHits = detection.restaurantHits;
-            existingCall.detectedFrom = detection.detectedFrom;
-            existingCall.confidence = detection.confidence;
-          } else {
-            // Keep existing type - new classification doesn't have enough confidence
-            console.warn(
-              `[businessType] conflict callId=${callId} old=${existingType} new=${detection.businessType} car=${detection.carHits} rest=${detection.restaurantHits} (diff=${hitDiff}<3, keeping ${existingType})`
-            );
-            // Keep existing type
-          }
-        } else {
-          // Same type, update hit counts and confidence
-          existingCall.businessType = detection.businessType;
-          existingCall.carHits = detection.carHits;
-          existingCall.restaurantHits = detection.restaurantHits;
-          existingCall.detectedFrom = detection.detectedFrom;
-          existingCall.confidence = detection.confidence;
-        }
-        // Keep existing businessType (already set above if needed)
-      } else {
-        // Existing type is "router" or null/undefined - allow transition to car/restaurant
-        if (detection.businessType !== existingType) {
-          console.log(
-            `[businessType] callId=${callId} event=${eventType} old=${existingType} new=${detection.businessType} car=${detection.carHits} rest=${detection.restaurantHits} conf=${detection.confidence}`
+            `[businessType] callId=${callId} event=${eventType} old=${existingType} new=${detection.businessType} scores=${JSON.stringify(detection.scores)} conf=${detection.confidence.toFixed(3)}`
           );
         }
         existingCall.businessType = detection.businessType;
-        existingCall.carHits = detection.carHits;
-        existingCall.restaurantHits = detection.restaurantHits;
+        existingCall.scores = detection.scores;
         existingCall.detectedFrom = detection.detectedFrom;
         existingCall.confidence = detection.confidence;
+      } else {
+        // Prevent switch - keep existing type
+        console.log(
+          `[businessType] prevent switch callId=${callId} event=${eventType} old=${existingType} new=${detection.businessType} scores=${JSON.stringify(detection.scores)} conf=${detection.confidence.toFixed(3)}`
+        );
+        // Keep existing businessType, but update scores if they're missing
+        if (!existingCall.scores) {
+          existingCall.scores = detection.scores;
+        }
       }
       
       existingCall.phoneNumber = event.call?.phoneNumber || event.phoneNumber || existingCall.phoneNumber;
       existingCall.customerId = event.call?.customerId || event.customerId || existingCall.customerId;
       existingCall.metadata = { ...existingCall.metadata, ...(event.call?.metadata || event.metadata) };
       existingCall.rawEvent = event;
-      updateCall(existingCall);
+      await updateCall(existingCall);
       
       console.log("[VAPI Webhook] call.started: Updated existing call", callId);
       return NextResponse.json({ 
@@ -352,20 +316,19 @@ async function handleCallStarted(event: any) {
       });
     } else {
       // Create new call
-      const call = createCall(event);
+      const call = await createCall(event);
       const detection = detectBusinessTypeFromCall(event);
       const eventType = event.type || event.event || event.eventType || "call.started";
       
       console.log(
-        `[businessType] callId=${callId} event=${eventType} old=router new=${detection.businessType} car=${detection.carHits} rest=${detection.restaurantHits} conf=${detection.confidence}`
+        `[businessType] callId=${callId} event=${eventType} old=router new=${detection.businessType} scores=${JSON.stringify(detection.scores)} conf=${detection.confidence.toFixed(3)}`
       );
       
       call.businessType = detection.businessType;
-      call.carHits = detection.carHits;
-      call.restaurantHits = detection.restaurantHits;
+      call.scores = detection.scores;
       call.detectedFrom = detection.detectedFrom;
       call.confidence = detection.confidence;
-      updateCall(call);
+      await updateCall(call);
       console.log("[VAPI Webhook] call.started: Created new call", call.id, "for VAPI call", callId);
       return NextResponse.json({ 
         success: true, 
@@ -398,7 +361,7 @@ async function handleCallEnded(event: any) {
     }
 
     // Find existing call
-    const existingCall = findCallByCallId(callId);
+    const existingCall = await findCallByCallId(callId);
     
     if (!existingCall) {
       console.warn("[VAPI Webhook] call.ended: Call not found", callId);
@@ -419,47 +382,34 @@ async function handleCallEnded(event: any) {
       existingCall.durationSeconds = Math.floor((endTime - startTime) / 1000);
     }
 
-    // Update business type if new detection is available (with same rules)
+    // Update business type if new detection is available (using scoring system)
     const detection = detectBusinessTypeFromCall(event);
     const existingType = existingCall.businessType || "router";
     const eventType = event.type || event.event || event.eventType || "call.ended";
     
-    if (existingType === "car" || existingType === "restaurant") {
-      if (detection.businessType === "router") {
-        // Keep existing type
-      } else if (detection.businessType !== existingType) {
-        // Conflict: car ↔ restaurant - check confidence threshold
-        const hitDiff = 
-          existingType === "car" 
-            ? detection.restaurantHits - detection.carHits
-            : detection.carHits - detection.restaurantHits;
-        
-        if (hitDiff >= 3) {
-          // Allow change
-          existingCall.businessType = detection.businessType;
-          existingCall.carHits = detection.carHits;
-          existingCall.restaurantHits = detection.restaurantHits;
-          existingCall.detectedFrom = detection.detectedFrom;
-          existingCall.confidence = detection.confidence;
-        }
-        // Otherwise keep existing
-      } else {
-        // Same type, update metadata
-        existingCall.carHits = detection.carHits;
-        existingCall.restaurantHits = detection.restaurantHits;
-        existingCall.detectedFrom = detection.detectedFrom;
-        existingCall.confidence = detection.confidence;
+    if (shouldSwitch(existingType, detection.businessType, detection.scores)) {
+      // Allow switch - update business type and scores
+      if (existingType !== detection.businessType) {
+        console.log(
+          `[businessType] callId=${callId} event=${eventType} old=${existingType} new=${detection.businessType} scores=${JSON.stringify(detection.scores)} conf=${detection.confidence.toFixed(3)}`
+        );
       }
-    } else {
-      // Existing type is router - allow transition
       existingCall.businessType = detection.businessType;
-      existingCall.carHits = detection.carHits;
-      existingCall.restaurantHits = detection.restaurantHits;
+      existingCall.scores = detection.scores;
       existingCall.detectedFrom = detection.detectedFrom;
       existingCall.confidence = detection.confidence;
+    } else {
+      // Prevent switch - keep existing type
+      console.log(
+        `[businessType] prevent switch callId=${callId} event=${eventType} old=${existingType} new=${detection.businessType} scores=${JSON.stringify(detection.scores)} conf=${detection.confidence.toFixed(3)}`
+      );
+      // Keep existing businessType, but update scores if they're missing
+      if (!existingCall.scores) {
+        existingCall.scores = detection.scores;
+      }
     }
 
-    updateCall(existingCall);
+    await updateCall(existingCall);
     console.log("[VAPI Webhook] call.ended: Updated call", callId, "duration:", existingCall.durationSeconds, "seconds");
     return NextResponse.json({ 
       success: true, 
@@ -492,7 +442,7 @@ async function handleOrderConfirmed(event: any) {
     }
 
     // Check if order already exists
-    let existingOrder = findOrderByOrderId(orderId);
+    let existingOrder = await findOrderByOrderId(orderId);
     
     if (existingOrder) {
       // Update existing order
@@ -515,7 +465,7 @@ async function handleOrderConfirmed(event: any) {
       existingOrder.currency = event.order?.currency || event.currency || existingOrder.currency || "USD";
       existingOrder.metadata = { ...existingOrder.metadata, ...(event.order?.metadata || event.metadata) };
       existingOrder.rawEvent = event;
-      updateOrder(existingOrder);
+      await updateOrder(existingOrder);
       
       console.log("[VAPI Webhook] order.confirmed: Updated existing order", orderId);
       return NextResponse.json({ 
@@ -525,11 +475,11 @@ async function handleOrderConfirmed(event: any) {
       });
     } else {
       // Create new order
-      const order = createOrder(event);
+      const order = await createOrder(event);
       
       // Optionally link to call if callId is provided
       if (order.callId) {
-        const call = findCallByCallId(order.callId);
+        const call = await findCallByCallId(order.callId);
         if (call) {
           console.log("[VAPI Webhook] order.confirmed: Linked order to call", call.id);
         }

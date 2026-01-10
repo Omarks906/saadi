@@ -9,7 +9,7 @@ export const runtime = "nodejs";
  */
 export async function GET(req: NextRequest) {
   try {
-    const calls = listCalls();
+    const calls = await listCalls();
     return NextResponse.json({
       success: true,
       count: calls.length,

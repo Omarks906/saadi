@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
-import { DATA_DIR } from "@/lib/paths";
-import { Call } from "@/lib/vapi-storage";
+import { readCall } from "@/lib/vapi-storage";
 
 export const runtime = "nodejs";
 
@@ -41,33 +38,18 @@ export async function GET(
     const resolvedParams = await Promise.resolve(params);
     const callId = resolvedParams.id;
 
-    // Construct file path
-    const filePath = path.join(DATA_DIR, `call-${callId}.json`);
-
-    // Check if file exists
-    if (!fs.existsSync(filePath)) {
-      return NextResponse.json(
-        { error: "Call not found" },
-        { status: 404 }
-      );
-    }
-
-    // Read and parse the call file
+    // Read call from database
     try {
-      const fileContent = fs.readFileSync(filePath, "utf-8");
-      const call = JSON.parse(fileContent) as Call;
-
-      // Validate it's a call object
-      if (!call || typeof call !== "object" || !call.callId) {
+      const call = await readCall(callId);
+      return NextResponse.json({ call });
+    } catch (error: any) {
+      if (error?.message?.includes("not found")) {
         return NextResponse.json(
-          { error: "Invalid call data" },
-          { status: 500 }
+          { error: "Call not found" },
+          { status: 404 }
         );
       }
-
-      return NextResponse.json({ call });
-    } catch (error) {
-      console.error(`[Admin] Error reading call file ${callId}:`, error);
+      console.error(`[Admin] Error reading call ${callId}:`, error);
       return NextResponse.json(
         { error: "Failed to read call data" },
         { status: 500 }

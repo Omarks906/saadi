@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Get all calls
-    const calls = listCalls();
+    const calls = await listCalls();
 
     // Calculate analytics
     const totalCalls = calls.length;
@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
       car: calls.filter(c => c.businessType === "car").length,
       restaurant: calls.filter(c => c.businessType === "restaurant").length,
       router: calls.filter(c => !c.businessType || c.businessType === "router").length,
+      other: calls.filter(c => c.businessType === "other").length,
     };
 
     // Duration per type
@@ -49,6 +50,7 @@ export async function GET(req: NextRequest) {
       car: calculateAverageDuration(calls.filter(c => c.businessType === "car")),
       restaurant: calculateAverageDuration(calls.filter(c => c.businessType === "restaurant")),
       router: calculateAverageDuration(calls.filter(c => !c.businessType || c.businessType === "router")),
+      other: calculateAverageDuration(calls.filter(c => c.businessType === "other")),
     };
 
     // Total duration per type
@@ -56,6 +58,7 @@ export async function GET(req: NextRequest) {
       car: calculateTotalDuration(calls.filter(c => c.businessType === "car")),
       restaurant: calculateTotalDuration(calls.filter(c => c.businessType === "restaurant")),
       router: calculateTotalDuration(calls.filter(c => !c.businessType || c.businessType === "router")),
+      other: calculateTotalDuration(calls.filter(c => c.businessType === "other")),
     };
 
     // Confidence statistics
@@ -63,6 +66,7 @@ export async function GET(req: NextRequest) {
       car: calculateConfidenceStats(calls.filter(c => c.businessType === "car")),
       restaurant: calculateConfidenceStats(calls.filter(c => c.businessType === "restaurant")),
       router: calculateConfidenceStats(calls.filter(c => !c.businessType || c.businessType === "router")),
+      other: calculateConfidenceStats(calls.filter(c => c.businessType === "other")),
     };
 
     return NextResponse.json({
