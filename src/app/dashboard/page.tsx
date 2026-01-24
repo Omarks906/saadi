@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Call } from "@/lib/vapi-storage";
 
+export const dynamic = "force-dynamic";
+
 async function getCalls(): Promise<Call[]> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const adminToken = process.env.ADMIN_TOKEN;

@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 async function getAnalytics() {
   let baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.trim();
   let adminToken = process.env.ADMIN_TOKEN?.trim();
