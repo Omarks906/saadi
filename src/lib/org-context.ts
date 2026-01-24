@@ -124,10 +124,18 @@ function getPhoneCandidates(event: any): PhoneCandidate[] {
     { label: "message.fromPhoneNumber", value: event?.message?.fromPhoneNumber },
     { label: "message.assistant.phoneNumber", value: event?.message?.assistant?.phoneNumber },
     { label: "message.assistant.number", value: event?.message?.assistant?.number },
+    { label: "message.customer.phoneNumber", value: event?.message?.customer?.phoneNumber },
+    { label: "message.customer.phone_number", value: event?.message?.customer?.phone_number },
+    { label: "message.customer.number", value: event?.message?.customer?.number },
+    { label: "message.customer.phone", value: event?.message?.customer?.phone },
+    { label: "message.customer.callerId", value: event?.message?.customer?.callerId },
+    { label: "message.customer.caller_id", value: event?.message?.customer?.caller_id },
     { label: "message.call.phoneNumber", value: event?.message?.call?.phoneNumber },
     { label: "message.call.to", value: event?.message?.call?.to },
     { label: "message.call.toPhoneNumber", value: event?.message?.call?.toPhoneNumber },
     { label: "message.call.from", value: event?.message?.call?.from },
+    { label: "message.call.customer.phoneNumber", value: event?.message?.call?.customer?.phoneNumber },
+    { label: "message.call.customer.number", value: event?.message?.call?.customer?.number },
     { label: "statusUpdate.call.phoneNumber", value: event?.statusUpdate?.call?.phoneNumber },
     { label: "statusUpdate.call.to", value: event?.statusUpdate?.call?.to },
     { label: "statusUpdate.call.from", value: event?.statusUpdate?.call?.from },
@@ -172,6 +180,16 @@ function getPhoneCandidateReport(event: any): string[] {
       return `${label}=${formatted}`;
     })
     .filter((entry): entry is string => Boolean(entry));
+}
+
+function getPhoneDebugReport(event: any): string {
+  const parts = [
+    `message.phoneNumber=${formatCandidateValue(event?.message?.phoneNumber)}`,
+    `message.customer=${formatCandidateValue(event?.message?.customer)}`,
+    `message.call=${formatCandidateValue(event?.message?.call)}`,
+    `message.assistant=${formatCandidateValue(event?.message?.assistant)}`,
+  ];
+  return parts.join(" ");
 }
 
 export async function resolveOrgContext(
@@ -272,6 +290,7 @@ export async function resolveOrgContextForWebhook(
       `[org] no phone extracted candidates=${candidateReport.join(" | ")}`
     );
   } else {
+    console.log(`[org] phone debug ${getPhoneDebugReport(event)}`);
     console.log("[org] no phone candidates found in webhook");
   }
 
