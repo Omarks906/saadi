@@ -71,8 +71,8 @@ function markEventSeen(eventKey: string): void {
  */
 export async function POST(req: NextRequest) {
   try {
-    const org = await resolveOrgContextForWebhook(req, body);
     const body = await req.json();
+    const org = await resolveOrgContextForWebhook(req, body);
     // VAPI sends events in different formats:
     // - body.type (standard)
     // - body.event (alternative)
