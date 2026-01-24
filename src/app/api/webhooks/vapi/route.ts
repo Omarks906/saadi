@@ -13,7 +13,7 @@ import {
 import { getBusinessTypeFromAssistantId } from "@/lib/vapi-assistant-map";
 import { detectBusinessTypeFromCall, shouldSwitch } from "@/lib/business-type-detector";
 import { runPrintPipeline } from "@/lib/printing/print-pipeline";
-import { resolveOrgContext } from "@/lib/org-context";
+import { resolveOrgContextForWebhook } from "@/lib/org-context";
 
 export const runtime = "nodejs";
 
@@ -71,7 +71,7 @@ function markEventSeen(eventKey: string): void {
  */
 export async function POST(req: NextRequest) {
   try {
-    const org = await resolveOrgContext(req);
+    const org = await resolveOrgContextForWebhook(req, body);
     const body = await req.json();
     // VAPI sends events in different formats:
     // - body.type (standard)

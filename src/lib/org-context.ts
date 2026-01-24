@@ -6,6 +6,10 @@ export type OrgContext = {
   slug: string;
 };
 
+type ResolveOptions = {
+  log?: boolean;
+};
+
 function getExplicitOrgId(req: NextRequest): string | null {
   return (
     req.nextUrl.searchParams.get("orgId") ||
@@ -49,7 +53,59 @@ async function loadFirstOrg(): Promise<OrgContext | null> {
   return { id: result.rows[0].id, slug: result.rows[0].slug };
 }
 
-export async function resolveOrgContext(req: NextRequest): Promise<OrgContext> {
+function logResolvedOrg(org: OrgContext) {
+  console.log(`[org] resolved slug=${org.slug} id=${org.id}`);
+}
+
+function normalizePhone(value?: string | null): string | null {
+  if (!value) return null;
+  const normalized = value.replace(/[^\d+]/g, "");
+  return normalized || null;
+}
+
+function parsePhoneOrgMap(raw?: string): Record<string, string> {
+  if (!raw) return {};
+  const entries = raw.split(",").map((entry) => entry.trim()).filter(Boolean);
+  const mapping: Record<string, string> = {};
+  for (const entry of entries) {
+    const [phoneRaw, slugRaw] = entry.split(/[:=]/).map((part) => part.trim());
+    if (!phoneRaw || !slugRaw) continue;
+    const phone = normalizePhone(phoneRaw);
+    if (!phone) continue;
+    mapping[phone] = slugRaw;
+  }
+  return mapping;
+}
+
+function extractInboundPhone(event: any): string | null {
+  const candidates = [
+    event?.call?.phoneNumber,
+    event?.phoneNumber,
+    event?.call?.to,
+    event?.call?.toPhoneNumber,
+    event?.call?.to_number,
+    event?.call?.toNumber,
+    event?.call?.phone_number,
+    event?.message?.call?.phoneNumber,
+    event?.message?.call?.to,
+    event?.message?.call?.toPhoneNumber,
+    event?.statusUpdate?.call?.phoneNumber,
+    event?.statusUpdate?.call?.to,
+    event?.endOfCallReport?.call?.phoneNumber,
+    event?.endOfCallReport?.call?.to,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = normalizePhone(candidate);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
+export async function resolveOrgContext(
+  req: NextRequest,
+  options: ResolveOptions = {}
+): Promise<OrgContext> {
   await initDatabase();
 
   const explicitOrgId = getExplicitOrgId(req);
@@ -58,7 +114,7 @@ export async function resolveOrgContext(req: NextRequest): Promise<OrgContext> {
     if (!org) {
       throw new Error(`Organization not found for orgId ${explicitOrgId}`);
     }
-    console.log(`[org] resolved slug=${org.slug} id=${org.id}`);
+    if (options.log !== false) logResolvedOrg(org);
     return org;
   }
 
@@ -68,7 +124,7 @@ export async function resolveOrgContext(req: NextRequest): Promise<OrgContext> {
     if (!org) {
       throw new Error(`Organization not found for orgSlug ${explicitSlug}`);
     }
-    console.log(`[org] resolved slug=${org.slug} id=${org.id}`);
+    if (options.log !== false) logResolvedOrg(org);
     return org;
   }
 
@@ -78,7 +134,7 @@ export async function resolveOrgContext(req: NextRequest): Promise<OrgContext> {
     if (!org) {
       throw new Error(`Organization not found for DEFAULT_ORG_SLUG ${defaultSlug}`);
     }
-    console.log(`[org] resolved slug=${org.slug} id=${org.id}`);
+    if (options.log !== false) logResolvedOrg(org);
     return org;
   }
 
@@ -86,6 +142,46 @@ export async function resolveOrgContext(req: NextRequest): Promise<OrgContext> {
   if (!firstOrg) {
     throw new Error("No organizations found in database");
   }
-  console.log(`[org] resolved slug=${firstOrg.slug} id=${firstOrg.id}`);
+  if (options.log !== false) logResolvedOrg(firstOrg);
   return firstOrg;
+}
+
+export async function resolveOrgContextForWebhook(
+  req: NextRequest,
+  event: any
+): Promise<OrgContext> {
+  await initDatabase();
+
+  const explicitOrgId = getExplicitOrgId(req);
+  if (explicitOrgId) {
+    const org = await loadOrgById(explicitOrgId);
+    if (!org) {
+      throw new Error(`Organization not found for orgId ${explicitOrgId}`);
+    }
+    logResolvedOrg(org);
+    return org;
+  }
+
+  const explicitSlug = getExplicitOrgSlug(req);
+  if (explicitSlug) {
+    const org = await loadOrgBySlug(explicitSlug);
+    if (!org) {
+      throw new Error(`Organization not found for orgSlug ${explicitSlug}`);
+    }
+    logResolvedOrg(org);
+    return org;
+  }
+
+  const phoneMap = parsePhoneOrgMap(process.env.ORG_SLUG_BY_PHONE);
+  const inboundPhone = extractInboundPhone(event);
+  if (inboundPhone && phoneMap[inboundPhone]) {
+    const org = await loadOrgBySlug(phoneMap[inboundPhone]);
+    if (!org) {
+      throw new Error(`Organization not found for phone ${inboundPhone}`);
+    }
+    logResolvedOrg(org);
+    return org;
+  }
+
+  return resolveOrgContext(req);
 }
