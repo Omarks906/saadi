@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listCalls } from "@/lib/vapi-storage";
+import { listCallsByOrganization } from "@/lib/vapi-storage";
+import { resolveOrgContext } from "@/lib/org-context";
 
 export const runtime = "nodejs";
 
@@ -32,7 +33,8 @@ export async function GET(req: NextRequest) {
     }
 
     // Get all calls
-    const calls = await listCalls();
+    const org = await resolveOrgContext(req);
+    const calls = await listCallsByOrganization(org.id);
 
     // Calculate analytics
     const totalCalls = calls.length;

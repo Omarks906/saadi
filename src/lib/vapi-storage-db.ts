@@ -230,6 +230,21 @@ export async function readCall(id: string): Promise<Call> {
   return rowToCall(result.rows[0]);
 }
 
+export async function readCallByOrganization(id: string, organizationId: string): Promise<Call> {
+  await ensureDbInitialized();
+  const pool = getPool();
+
+  const result = await pool.query(
+    "SELECT * FROM calls WHERE id = $1 AND organization_id = $2",
+    [id, organizationId]
+  );
+  if (result.rows.length === 0) {
+    throw new Error(`Call with id ${id} not found`);
+  }
+
+  return rowToCall(result.rows[0]);
+}
+
 /**
  * Update a Call record
  */
@@ -403,6 +418,28 @@ export async function findOrderByOrderId(orderId: string): Promise<Order | null>
   }
 }
 
+export async function findOrderByOrderIdByOrganization(
+  orderId: string,
+  organizationId: string
+): Promise<Order | null> {
+  await ensureDbInitialized();
+  const pool = getPool();
+
+  try {
+    const result = await pool.query(
+      "SELECT * FROM orders WHERE order_id = $1 AND organization_id = $2",
+      [orderId, organizationId]
+    );
+    if (result.rows.length === 0) {
+      return null;
+    }
+    return rowToOrder(result.rows[0]);
+  } catch (error) {
+    console.error("[VAPI Storage DB] Error finding order:", error);
+    return null;
+  }
+}
+
 /**
  * List all Calls
  */
@@ -415,6 +452,22 @@ export async function listCalls(): Promise<Call[]> {
     const result = await pool.query(
       "SELECT * FROM calls WHERE tenant_id = $1 ORDER BY created_at DESC",
       [tenantId]
+    );
+    return result.rows.map(rowToCall);
+  } catch (error) {
+    console.error("[VAPI Storage DB] Error listing calls:", error);
+    return [];
+  }
+}
+
+export async function listCallsByOrganization(organizationId: string): Promise<Call[]> {
+  await ensureDbInitialized();
+  const pool = getPool();
+
+  try {
+    const result = await pool.query(
+      "SELECT * FROM calls WHERE organization_id = $1 ORDER BY created_at DESC",
+      [organizationId]
     );
     return result.rows.map(rowToCall);
   } catch (error) {

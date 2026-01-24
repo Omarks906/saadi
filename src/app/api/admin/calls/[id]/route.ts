@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readCall } from "@/lib/vapi-storage";
+import { readCallByOrganization } from "@/lib/vapi-storage";
+import { resolveOrgContext } from "@/lib/org-context";
 
 export const runtime = "nodejs";
 
@@ -40,7 +41,8 @@ export async function GET(
 
     // Read call from database
     try {
-      const call = await readCall(callId);
+      const org = await resolveOrgContext(req);
+      const call = await readCallByOrganization(callId, org.id);
       return NextResponse.json({ call });
     } catch (error: any) {
       if (error?.message?.includes("not found")) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantId } from "@/lib/tenant";
 import { listFailedPrintJobs } from "@/lib/printing/print-jobs";
+import { resolveOrgContext } from "@/lib/org-context";
 
 export const runtime = "nodejs";
 
@@ -39,8 +39,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    const org = await resolveOrgContext(req);
     const jobs = await listFailedPrintJobs({
-      organizationId: getTenantId(),
+      organizationId: org.id,
       limit: 50,
     });
 

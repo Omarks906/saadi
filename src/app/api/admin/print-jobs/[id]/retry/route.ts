@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getTenantId } from "@/lib/tenant";
 import { getPrintJobById, markPrintJobRetrying } from "@/lib/printing/print-jobs";
-import { findOrderByOrderId } from "@/lib/vapi-storage";
+import { findOrderByOrderIdByOrganization } from "@/lib/vapi-storage";
 import { runPrintPipeline } from "@/lib/printing/print-pipeline";
+import { resolveOrgContext } from "@/lib/org-context";
 
 export const runtime = "nodejs";
 
@@ -38,7 +38,8 @@ export async function POST(
 
     const resolvedParams = await Promise.resolve(params);
     const jobId = resolvedParams.id;
-    const organizationId = getTenantId();
+    const org = await resolveOrgContext(req);
+    const organizationId = org.id;
 
     const job = await getPrintJobById({ organizationId, id: jobId });
     if (!job) {
@@ -52,7 +53,7 @@ export async function POST(
       );
     }
 
-    const order = await findOrderByOrderId(job.orderId);
+    const order = await findOrderByOrderIdByOrganization(job.orderId, organizationId);
     if (!order) {
       return NextResponse.json(
         { error: "Order not found for print job" },
@@ -68,7 +69,7 @@ export async function POST(
       );
     }
 
-    void runPrintPipeline(order, { allowRetrying: true }).catch((error) => {
+    void runPrintPipeline(order, { allowRetrying: true, organizationId }).catch((error) => {
       console.error(
         JSON.stringify({
           event: "print_retry_exception",

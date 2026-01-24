@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Call, listCalls } from "@/lib/vapi-storage";
+import { Call, listCallsByOrganization } from "@/lib/vapi-storage";
+import { resolveOrgContext } from "@/lib/org-context";
 
 export const runtime = "nodejs";
 
@@ -44,7 +45,8 @@ export async function GET(req: NextRequest) {
     // Get all calls from database
     let calls: Call[];
     try {
-      calls = await listCalls();
+      const org = await resolveOrgContext(req);
+      calls = await listCallsByOrganization(org.id);
       console.log(`[Admin] Found ${calls.length} calls in database`);
     } catch (error: any) {
       console.error("[Admin] Error fetching calls from database:", error);
