@@ -36,10 +36,40 @@ async function getCalls(): Promise<Call[]> {
   }
 }
 
+async function getFailedPrintJobsCount(): Promise<number> {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  const adminToken = process.env.ADMIN_TOKEN;
+
+  if (!baseUrl || !adminToken) {
+    return 0;
+  }
+
+  try {
+    const response = await fetch(`${baseUrl}/api/admin/print-jobs?status=failed`, {
+      headers: {
+        "x-admin-token": adminToken,
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      console.error(`[Dashboard] Failed to fetch print jobs: ${response.status}`);
+      return 0;
+    }
+
+    const data = await response.json();
+    return Number(data.count) || 0;
+  } catch (error) {
+    console.error("[Dashboard] Error fetching print jobs:", error);
+    return 0;
+  }
+}
+
 export default async function DashboardPage() {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const adminToken = process.env.ADMIN_TOKEN;
   const calls = await getCalls();
+  const failedPrintJobs = await getFailedPrintJobsCount();
 
   // Show configuration errors if env vars are missing
   const hasConfigError = !baseUrl || !adminToken;
@@ -65,6 +95,14 @@ export default async function DashboardPage() {
           </ul>
           <p className="mt-3 text-sm text-yellow-700">
             Please set these in Railway Dashboard → Your Service → Variables tab
+          </p>
+        </div>
+      )}
+
+      {failedPrintJobs > 0 && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-sm font-semibold text-red-800">
+            Printing issues: {failedPrintJobs} failed jobs
           </p>
         </div>
       )}

@@ -69,6 +69,7 @@ async function createTablesDirectly(client: PoolClient): Promise<void> {
     CREATE TABLE IF NOT EXISTS calls (
       id VARCHAR(255) PRIMARY KEY,
       call_id VARCHAR(255) NOT NULL UNIQUE,
+      tenant_id VARCHAR(255) NOT NULL DEFAULT 'default',
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
       started_at TIMESTAMP WITH TIME ZONE NOT NULL,
       ended_at TIMESTAMP WITH TIME ZONE,
@@ -88,6 +89,7 @@ async function createTablesDirectly(client: PoolClient): Promise<void> {
       id VARCHAR(255) PRIMARY KEY,
       order_id VARCHAR(255) NOT NULL UNIQUE,
       call_id VARCHAR(255),
+      tenant_id VARCHAR(255) NOT NULL DEFAULT 'default',
       created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
       confirmed_at TIMESTAMP WITH TIME ZONE NOT NULL,
       status VARCHAR(50) NOT NULL CHECK (status IN ('confirmed', 'cancelled', 'completed')),
@@ -108,6 +110,10 @@ async function createTablesDirectly(client: PoolClient): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_orders_call_id ON orders(call_id);
     CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_orders_business_type ON orders(business_type);
+    CREATE INDEX IF NOT EXISTS idx_calls_tenant_id ON calls(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_calls_tenant_created_at ON calls(tenant_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_orders_tenant_id ON orders(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_orders_tenant_created_at ON orders(tenant_id, created_at DESC);
   `);
   
   console.log("[DB] Tables created successfully");

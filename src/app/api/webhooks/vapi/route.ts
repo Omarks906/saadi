@@ -3,6 +3,7 @@ import { createCall, findCallByCallId, updateCall, extractAssistantId } from "@/
 import { createOrder, findOrderByOrderId, updateOrder } from "@/lib/vapi-storage";
 import { getBusinessTypeFromAssistantId } from "@/lib/vapi-assistant-map";
 import { detectBusinessTypeFromCall, shouldSwitch } from "@/lib/business-type-detector";
+import { runPrintPipeline } from "@/lib/printing/print-pipeline";
 
 export const runtime = "nodejs";
 
@@ -242,12 +243,12 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error("[VAPI Webhook] Error processing webhook:", error);
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: error?.message || "Internal server error",
-        details: error?.stack 
+        details: error?.stack,
       },
-      { status: 500 }
+      { status: 200 }
     );
   }
 }
@@ -466,6 +467,29 @@ async function handleOrderConfirmed(event: any) {
       existingOrder.metadata = { ...existingOrder.metadata, ...(event.order?.metadata || event.metadata) };
       existingOrder.rawEvent = event;
       await updateOrder(existingOrder);
+      void runPrintPipeline(existingOrder)
+        .then((result) => {
+          if (!result.ok) {
+            console.error(
+              JSON.stringify({
+                event: "print_failed",
+                order_id: existingOrder.orderId,
+                organization_id: existingOrder.tenantId,
+                error: result.error || "print_failed",
+              })
+            );
+          }
+        })
+        .catch((error) => {
+          console.error(
+            JSON.stringify({
+              event: "print_exception",
+              order_id: existingOrder.orderId,
+              organization_id: existingOrder.tenantId,
+              error: error?.message || String(error),
+            })
+          );
+        });
       
       console.log("[VAPI Webhook] order.confirmed: Updated existing order", orderId);
       return NextResponse.json({ 
@@ -485,6 +509,29 @@ async function handleOrderConfirmed(event: any) {
         }
       }
       
+      void runPrintPipeline(order)
+        .then((result) => {
+          if (!result.ok) {
+            console.error(
+              JSON.stringify({
+                event: "print_failed",
+                order_id: order.orderId,
+                organization_id: order.tenantId,
+                error: result.error || "print_failed",
+              })
+            );
+          }
+        })
+        .catch((error) => {
+          console.error(
+            JSON.stringify({
+              event: "print_exception",
+              order_id: order.orderId,
+              organization_id: order.tenantId,
+              error: error?.message || String(error),
+            })
+          );
+        });
       console.log("[VAPI Webhook] order.confirmed: Created new order", order.id, "for VAPI order", orderId);
       return NextResponse.json({ 
         success: true, 
