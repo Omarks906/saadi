@@ -61,6 +61,9 @@ CREATE TABLE IF NOT EXISTS organizations (
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE organizations
+  ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
 INSERT INTO organizations (slug, name)
 VALUES ('chilli', 'Restaurang & Pizzeria Chilli')
 ON CONFLICT (slug) DO NOTHING;
