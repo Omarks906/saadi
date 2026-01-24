@@ -63,6 +63,20 @@ function normalizePhone(value?: string | null): string | null {
   return normalized || null;
 }
 
+function normalizePhoneFromCandidate(candidate: any): string | null {
+  if (!candidate) return null;
+  if (typeof candidate === "string") return normalizePhone(candidate);
+  if (typeof candidate === "object") {
+    return (
+      normalizePhone(candidate.phoneNumber) ||
+      normalizePhone(candidate.phone_number) ||
+      normalizePhone(candidate.number) ||
+      normalizePhone(candidate.phone)
+    );
+  }
+  return null;
+}
+
 function parsePhoneOrgMap(raw?: string): Record<string, string> {
   if (!raw) return {};
   const entries = raw.split(",").map((entry) => entry.trim()).filter(Boolean);
@@ -96,7 +110,7 @@ function extractInboundPhone(event: any): string | null {
   ];
 
   for (const candidate of candidates) {
-    const normalized = normalizePhone(candidate);
+    const normalized = normalizePhoneFromCandidate(candidate);
     if (normalized) return normalized;
   }
   return null;
@@ -175,12 +189,19 @@ export async function resolveOrgContextForWebhook(
   const phoneMap = parsePhoneOrgMap(process.env.ORG_SLUG_BY_PHONE);
   const inboundPhone = extractInboundPhone(event);
   if (inboundPhone && phoneMap[inboundPhone]) {
-    const org = await loadOrgBySlug(phoneMap[inboundPhone]);
+    const orgSlug = phoneMap[inboundPhone];
+    const org = await loadOrgBySlug(orgSlug);
     if (!org) {
       throw new Error(`Organization not found for phone ${inboundPhone}`);
     }
-    logResolvedOrg(org);
+    console.log(
+      `[org] resolved slug=${org.slug} id=${org.id} reason=phone phone=${inboundPhone}`
+    );
     return org;
+  }
+
+  if (inboundPhone) {
+    console.log(`[org] no phone map match phone=${inboundPhone}`);
   }
 
   return resolveOrgContext(req);
