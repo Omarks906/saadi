@@ -91,29 +91,79 @@ function parsePhoneOrgMap(raw?: string): Record<string, string> {
   return mapping;
 }
 
-function extractInboundPhone(event: any): string | null {
-  const candidates = [
-    event?.call?.phoneNumber,
-    event?.phoneNumber,
-    event?.call?.to,
-    event?.call?.toPhoneNumber,
-    event?.call?.to_number,
-    event?.call?.toNumber,
-    event?.call?.phone_number,
-    event?.message?.call?.phoneNumber,
-    event?.message?.call?.to,
-    event?.message?.call?.toPhoneNumber,
-    event?.statusUpdate?.call?.phoneNumber,
-    event?.statusUpdate?.call?.to,
-    event?.endOfCallReport?.call?.phoneNumber,
-    event?.endOfCallReport?.call?.to,
-  ];
+type PhoneCandidate = { label: string; value: any };
 
+function getPhoneCandidates(event: any): PhoneCandidate[] {
+  return [
+    { label: "call.phoneNumber", value: event?.call?.phoneNumber },
+    { label: "call.to", value: event?.call?.to },
+    { label: "call.toPhoneNumber", value: event?.call?.toPhoneNumber },
+    { label: "call.to_number", value: event?.call?.to_number },
+    { label: "call.toNumber", value: event?.call?.toNumber },
+    { label: "call.toPhone", value: event?.call?.toPhone },
+    { label: "call.phone_number", value: event?.call?.phone_number },
+    { label: "call.from", value: event?.call?.from },
+    { label: "call.fromNumber", value: event?.call?.fromNumber },
+    { label: "call.fromPhoneNumber", value: event?.call?.fromPhoneNumber },
+    { label: "call.from_number", value: event?.call?.from_number },
+    { label: "call.assistantPhoneNumber", value: event?.call?.assistantPhoneNumber },
+    { label: "call.assistant.phoneNumber", value: event?.call?.assistant?.phoneNumber },
+    { label: "assistant.phoneNumber", value: event?.assistant?.phoneNumber },
+    { label: "assistant.number", value: event?.assistant?.number },
+    { label: "phoneNumber", value: event?.phoneNumber },
+    { label: "to", value: event?.to },
+    { label: "toPhoneNumber", value: event?.toPhoneNumber },
+    { label: "from", value: event?.from },
+    { label: "fromNumber", value: event?.fromNumber },
+    { label: "fromPhoneNumber", value: event?.fromPhoneNumber },
+    { label: "message.call.phoneNumber", value: event?.message?.call?.phoneNumber },
+    { label: "message.call.to", value: event?.message?.call?.to },
+    { label: "message.call.toPhoneNumber", value: event?.message?.call?.toPhoneNumber },
+    { label: "message.call.from", value: event?.message?.call?.from },
+    { label: "statusUpdate.call.phoneNumber", value: event?.statusUpdate?.call?.phoneNumber },
+    { label: "statusUpdate.call.to", value: event?.statusUpdate?.call?.to },
+    { label: "statusUpdate.call.from", value: event?.statusUpdate?.call?.from },
+    { label: "endOfCallReport.call.phoneNumber", value: event?.endOfCallReport?.call?.phoneNumber },
+    { label: "endOfCallReport.call.to", value: event?.endOfCallReport?.call?.to },
+    { label: "endOfCallReport.call.from", value: event?.endOfCallReport?.call?.from },
+  ];
+}
+
+function extractInboundPhone(event: any): string | null {
+  const candidates = getPhoneCandidates(event);
   for (const candidate of candidates) {
-    const normalized = normalizePhoneFromCandidate(candidate);
+    const normalized = normalizePhoneFromCandidate(candidate.value);
     if (normalized) return normalized;
   }
   return null;
+}
+
+function formatCandidateValue(value: any): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  if (typeof value === "object") {
+    const extracted =
+      value.phoneNumber || value.phone_number || value.number || value.phone;
+    if (extracted) return String(extracted);
+    try {
+      const raw = JSON.stringify(value);
+      return raw.length > 120 ? `${raw.slice(0, 117)}...` : raw;
+    } catch {
+      return "[object]";
+    }
+  }
+  return String(value);
+}
+
+function getPhoneCandidateReport(event: any): string[] {
+  return getPhoneCandidates(event)
+    .map(({ label, value }) => {
+      const formatted = formatCandidateValue(value);
+      if (!formatted) return null;
+      return `${label}=${formatted}`;
+    })
+    .filter((entry): entry is string => Boolean(entry));
 }
 
 export async function resolveOrgContext(
@@ -166,6 +216,13 @@ export async function resolveOrgContextForWebhook(
 ): Promise<OrgContext> {
   await initDatabase();
 
+  const candidateReport = getPhoneCandidateReport(event);
+  if (candidateReport.length > 0) {
+    console.log(`[org] phone candidates ${candidateReport.join(" | ")}`);
+  } else {
+    console.log("[org] phone candidates none");
+  }
+
   const explicitOrgId = getExplicitOrgId(req);
   if (explicitOrgId) {
     const org = await loadOrgById(explicitOrgId);
@@ -202,6 +259,12 @@ export async function resolveOrgContextForWebhook(
 
   if (inboundPhone) {
     console.log(`[org] no phone map match phone=${inboundPhone}`);
+  } else if (candidateReport.length > 0) {
+    console.log(
+      `[org] no phone extracted candidates=${candidateReport.join(" | ")}`
+    );
+  } else {
+    console.log("[org] no phone candidates found in webhook");
   }
 
   return resolveOrgContext(req);
