@@ -103,14 +103,56 @@ UPDATE orders SET organization_id = COALESCE(
 ALTER TABLE calls ALTER COLUMN organization_id SET NOT NULL;
 ALTER TABLE orders ALTER COLUMN organization_id SET NOT NULL;
 ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_order_id_key;
-ALTER TABLE orders
-  ADD CONSTRAINT orders_org_order_unique UNIQUE (organization_id, order_id);
-ALTER TABLE print_jobs
-  ADD CONSTRAINT print_jobs_organization_fk
-  FOREIGN KEY (organization_id) REFERENCES organizations(id);
-ALTER TABLE calls
-  ADD CONSTRAINT calls_organization_fk
-  FOREIGN KEY (organization_id) REFERENCES organizations(id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_class t ON t.oid = c.conrelid
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    WHERE c.conname = 'orders_org_order_unique'
+      AND t.relname = 'orders'
+      AND n.nspname = 'public'
+  ) THEN
+    ALTER TABLE orders
+      ADD CONSTRAINT orders_org_order_unique UNIQUE (organization_id, order_id);
+  END IF;
+END
+$$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_class t ON t.oid = c.conrelid
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    WHERE c.conname = 'print_jobs_organization_fk'
+      AND t.relname = 'print_jobs'
+      AND n.nspname = 'public'
+  ) THEN
+    ALTER TABLE print_jobs
+      ADD CONSTRAINT print_jobs_organization_fk
+      FOREIGN KEY (organization_id) REFERENCES organizations(id);
+  END IF;
+END
+$$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint c
+    JOIN pg_class t ON t.oid = c.conrelid
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    WHERE c.conname = 'calls_organization_fk'
+      AND t.relname = 'calls'
+      AND n.nspname = 'public'
+  ) THEN
+    ALTER TABLE calls
+      ADD CONSTRAINT calls_organization_fk
+      FOREIGN KEY (organization_id) REFERENCES organizations(id);
+  END IF;
+END
+$$;
 
 -- Indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_calls_call_id ON calls(call_id);
