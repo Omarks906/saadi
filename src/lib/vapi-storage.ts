@@ -7,6 +7,7 @@ export {
   readCallByOrganization,
   updateCall,
   findCallByCallId,
+  findCallByCallIdByOrganization,
   createOrder,
   readOrder,
   updateOrder,

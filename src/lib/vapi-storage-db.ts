@@ -8,6 +8,7 @@ export type Call = {
   id: string;
   callId: string;
   tenantId: string;
+  organizationId: string;
   createdAt: string;
   startedAt: string;
   endedAt?: string;
@@ -28,6 +29,7 @@ export type Order = {
   orderId: string;
   callId?: string;
   tenantId: string;
+  organizationId: string;
   createdAt: string;
   confirmedAt: string;
   status: "confirmed" | "cancelled" | "completed";
@@ -77,6 +79,7 @@ function rowToCall(row: any): Call {
     id: row.id,
     callId: row.call_id,
     tenantId: row.tenant_id,
+    organizationId: row.organization_id,
     createdAt: row.created_at,
     startedAt: row.started_at,
     endedAt: row.ended_at || undefined,
@@ -101,6 +104,7 @@ function callToRow(call: Call): any {
     id: call.id,
     call_id: call.callId,
     tenant_id: call.tenantId,
+    organization_id: call.organizationId,
     created_at: call.createdAt,
     started_at: call.startedAt,
     ended_at: call.endedAt || null,
@@ -126,6 +130,7 @@ function rowToOrder(row: any): Order {
     orderId: row.order_id,
     callId: row.call_id || undefined,
     tenantId: row.tenant_id,
+    organizationId: row.organization_id,
     createdAt: row.created_at,
     confirmedAt: row.confirmed_at,
     status: row.status,
@@ -148,6 +153,7 @@ function orderToRow(order: Order): any {
     order_id: order.orderId,
     call_id: order.callId || null,
     tenant_id: order.tenantId,
+    organization_id: order.organizationId,
     created_at: order.createdAt,
     confirmed_at: order.confirmedAt,
     status: order.status,
@@ -164,10 +170,14 @@ function orderToRow(order: Order): any {
 /**
  * Create a new Call record from webhook event
  */
-export async function createCall(event: any): Promise<Call> {
+export async function createCall(
+  event: any,
+  options?: { organizationId?: string }
+): Promise<Call> {
   await ensureDbInitialized();
   const pool = getPool();
-  const tenantId = getTenantId();
+  const organizationId = options?.organizationId || getTenantId();
+  const tenantId = organizationId;
   
   const id = crypto.randomBytes(8).toString("hex");
   const assistantId = extractAssistantId(event);
@@ -179,6 +189,7 @@ export async function createCall(event: any): Promise<Call> {
     id,
     callId: event.call?.id || event.id || crypto.randomBytes(8).toString("hex"),
     tenantId,
+    organizationId,
     createdAt: new Date().toISOString(),
     startedAt: event.startedAt || event.timestamp || new Date().toISOString(),
     status: "started",
@@ -192,13 +203,15 @@ export async function createCall(event: any): Promise<Call> {
   const row = callToRow(call);
   await pool.query(
     `INSERT INTO calls (
-      id, call_id, tenant_id, created_at, started_at, ended_at, duration_seconds,
+      id, call_id, tenant_id, organization_id,
+      created_at, started_at, ended_at, duration_seconds,
       status, business_type, scores, detected_from, confidence,
       phone_number, customer_id, metadata, raw_event
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
     [
-      row.id, row.call_id, row.tenant_id, row.created_at, row.started_at, row.ended_at,
-      row.duration_seconds, row.status, row.business_type,
+      row.id, row.call_id, row.tenant_id, row.organization_id,
+      row.created_at, row.started_at, row.ended_at, row.duration_seconds,
+      row.status, row.business_type,
       row.scores ? JSON.stringify(row.scores) : null,
       row.detected_from, row.confidence,
       row.phone_number, row.customer_id,
@@ -251,16 +264,16 @@ export async function readCallByOrganization(id: string, organizationId: string)
 export async function updateCall(call: Call): Promise<void> {
   await ensureDbInitialized();
   const pool = getPool();
-  const tenantId = getTenantId();
-  
-  call.tenantId = tenantId;
+  const organizationId = call.organizationId || getTenantId();
+  call.organizationId = organizationId;
+  call.tenantId = call.tenantId || organizationId;
   const row = callToRow(call);
   await pool.query(
     `UPDATE calls SET
       call_id = $2, started_at = $3, ended_at = $4, duration_seconds = $5,
       status = $6, business_type = $7, scores = $8, detected_from = $9, confidence = $10,
       phone_number = $11, customer_id = $12, metadata = $13, raw_event = $14
-    WHERE id = $1 AND tenant_id = $15`,
+    WHERE id = $1 AND organization_id = $15`,
     [
       row.id, row.call_id, row.started_at, row.ended_at, row.duration_seconds,
       row.status, row.business_type,
@@ -269,7 +282,7 @@ export async function updateCall(call: Call): Promise<void> {
       row.phone_number, row.customer_id,
       row.metadata ? JSON.stringify(row.metadata) : null,
       row.raw_event ? JSON.stringify(row.raw_event) : null,
-      row.tenant_id,
+      row.organization_id,
     ]
   );
 }
@@ -297,13 +310,39 @@ export async function findCallByCallId(callId: string): Promise<Call | null> {
   }
 }
 
+export async function findCallByCallIdByOrganization(
+  callId: string,
+  organizationId: string
+): Promise<Call | null> {
+  await ensureDbInitialized();
+  const pool = getPool();
+
+  try {
+    const result = await pool.query(
+      "SELECT * FROM calls WHERE call_id = $1 AND organization_id = $2",
+      [callId, organizationId]
+    );
+    if (result.rows.length === 0) {
+      return null;
+    }
+    return rowToCall(result.rows[0]);
+  } catch (error) {
+    console.error("[VAPI Storage DB] Error finding call:", error);
+    return null;
+  }
+}
+
 /**
  * Create a new Order record from webhook event
  */
-export async function createOrder(event: any): Promise<Order> {
+export async function createOrder(
+  event: any,
+  options?: { organizationId?: string }
+): Promise<Order> {
   await ensureDbInitialized();
   const pool = getPool();
-  const tenantId = getTenantId();
+  const organizationId = options?.organizationId || getTenantId();
+  const tenantId = organizationId;
   
   const id = crypto.randomBytes(8).toString("hex");
   const callId = event.order?.callId || event.callId;
@@ -317,6 +356,7 @@ export async function createOrder(event: any): Promise<Order> {
     orderId: event.order?.id || event.id || crypto.randomBytes(8).toString("hex"),
     callId,
     tenantId,
+    organizationId,
     createdAt: new Date().toISOString(),
     confirmedAt: event.confirmedAt || event.timestamp || new Date().toISOString(),
     status: "confirmed",
@@ -332,12 +372,13 @@ export async function createOrder(event: any): Promise<Order> {
   const row = orderToRow(order);
   await pool.query(
     `INSERT INTO orders (
-      id, order_id, call_id, tenant_id, created_at, confirmed_at, status,
+      id, order_id, call_id, tenant_id, organization_id,
+      created_at, confirmed_at, status,
       business_type, customer_id, items, total_amount, currency, metadata, raw_event
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
     [
-      row.id, row.order_id, row.call_id, row.tenant_id, row.created_at, row.confirmed_at,
-      row.status, row.business_type, row.customer_id,
+      row.id, row.order_id, row.call_id, row.tenant_id, row.organization_id,
+      row.created_at, row.confirmed_at, row.status, row.business_type, row.customer_id,
       row.items ? JSON.stringify(row.items) : null,
       row.total_amount, row.currency,
       row.metadata ? JSON.stringify(row.metadata) : null,
@@ -373,16 +414,16 @@ export async function readOrder(id: string): Promise<Order> {
 export async function updateOrder(order: Order): Promise<void> {
   await ensureDbInitialized();
   const pool = getPool();
-  const tenantId = getTenantId();
-  
-  order.tenantId = tenantId;
+  const organizationId = order.organizationId || getTenantId();
+  order.organizationId = organizationId;
+  order.tenantId = order.tenantId || organizationId;
   const row = orderToRow(order);
   await pool.query(
     `UPDATE orders SET
       order_id = $2, call_id = $3, confirmed_at = $4, status = $5,
       business_type = $6, customer_id = $7, items = $8, total_amount = $9,
       currency = $10, metadata = $11, raw_event = $12
-    WHERE id = $1 AND tenant_id = $13`,
+    WHERE id = $1 AND organization_id = $13`,
     [
       row.id, row.order_id, row.call_id, row.confirmed_at, row.status,
       row.business_type, row.customer_id,
@@ -390,7 +431,7 @@ export async function updateOrder(order: Order): Promise<void> {
       row.total_amount, row.currency,
       row.metadata ? JSON.stringify(row.metadata) : null,
       row.raw_event ? JSON.stringify(row.raw_event) : null,
-      row.tenant_id,
+      row.organization_id,
     ]
   );
 }

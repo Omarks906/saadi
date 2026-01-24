@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createCall, findCallByCallId, updateCall, extractAssistantId } from "@/lib/vapi-storage";
-import { createOrder, findOrderByOrderId, updateOrder } from "@/lib/vapi-storage";
+import {
+  createCall,
+  findCallByCallIdByOrganization,
+  updateCall,
+  extractAssistantId,
+} from "@/lib/vapi-storage";
+import {
+  createOrder,
+  findOrderByOrderIdByOrganization,
+  updateOrder,
+} from "@/lib/vapi-storage";
 import { getBusinessTypeFromAssistantId } from "@/lib/vapi-assistant-map";
 import { detectBusinessTypeFromCall, shouldSwitch } from "@/lib/business-type-detector";
 import { runPrintPipeline } from "@/lib/printing/print-pipeline";
+import { resolveOrgContext } from "@/lib/org-context";
 
 export const runtime = "nodejs";
 
@@ -61,6 +71,7 @@ function markEventSeen(eventKey: string): void {
  */
 export async function POST(req: NextRequest) {
   try {
+    const org = await resolveOrgContext(req);
     const body = await req.json();
     // VAPI sends events in different formats:
     // - body.type (standard)
@@ -162,7 +173,7 @@ export async function POST(req: NextRequest) {
       
       if (callId) {
         // Check if call exists, if not create it first
-        let existingCall = await findCallByCallId(callId);
+        let existingCall = await findCallByCallIdByOrganization(callId, org.id);
         
         if (!existingCall) {
           // Create call first with available data
@@ -174,7 +185,7 @@ export async function POST(req: NextRequest) {
             },
             type: "call.started",
             startedAt: report.startedAt || report.startTime || report.createdAt || new Date().toISOString(),
-          });
+          }, { organizationId: org.id });
           existingCall = newCall;
         }
         
@@ -269,7 +280,7 @@ async function handleCallStarted(event: any) {
     }
 
     // Check if call already exists
-    let existingCall = await findCallByCallId(callId);
+    let existingCall = await findCallByCallIdByOrganization(callId, org.id);
     
     if (existingCall) {
       // Update existing call
@@ -317,7 +328,7 @@ async function handleCallStarted(event: any) {
       });
     } else {
       // Create new call
-      const call = await createCall(event);
+      const call = await createCall(event, { organizationId: org.id });
       const detection = detectBusinessTypeFromCall(event);
       const eventType = event.type || event.event || event.eventType || "call.started";
       
@@ -362,7 +373,7 @@ async function handleCallEnded(event: any) {
     }
 
     // Find existing call
-    const existingCall = await findCallByCallId(callId);
+    const existingCall = await findCallByCallIdByOrganization(callId, org.id);
     
     if (!existingCall) {
       console.warn("[VAPI Webhook] call.ended: Call not found", callId);
@@ -443,7 +454,7 @@ async function handleOrderConfirmed(event: any) {
     }
 
     // Check if order already exists
-    let existingOrder = await findOrderByOrderId(orderId);
+    let existingOrder = await findOrderByOrderIdByOrganization(orderId, org.id);
     
     if (existingOrder) {
       // Update existing order
@@ -467,7 +478,7 @@ async function handleOrderConfirmed(event: any) {
       existingOrder.metadata = { ...existingOrder.metadata, ...(event.order?.metadata || event.metadata) };
       existingOrder.rawEvent = event;
       await updateOrder(existingOrder);
-      void runPrintPipeline(existingOrder)
+      void runPrintPipeline(existingOrder, { organizationId: org.id })
         .then((result) => {
           if (!result.ok) {
             console.error(
@@ -499,17 +510,17 @@ async function handleOrderConfirmed(event: any) {
       });
     } else {
       // Create new order
-      const order = await createOrder(event);
+      const order = await createOrder(event, { organizationId: org.id });
       
       // Optionally link to call if callId is provided
       if (order.callId) {
-        const call = await findCallByCallId(order.callId);
+        const call = await findCallByCallIdByOrganization(order.callId, org.id);
         if (call) {
           console.log("[VAPI Webhook] order.confirmed: Linked order to call", call.id);
         }
       }
       
-      void runPrintPipeline(order)
+      void runPrintPipeline(order, { organizationId: org.id })
         .then((result) => {
           if (!result.ok) {
             console.error(
