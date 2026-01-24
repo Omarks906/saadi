@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { initDatabase } from "@/lib/db/connection";
+import { getPool } from "@/lib/db/connection";
 
 export const runtime = "nodejs";
 
@@ -9,7 +9,8 @@ export const runtime = "nodejs";
  */
 export async function GET() {
   try {
-    await initDatabase();
+    // Trigger database initialization via pool creation
+    await getPool();
     return NextResponse.json({ ok: true });
   } catch (error: any) {
     console.error("[Health] DB init failed:", error);

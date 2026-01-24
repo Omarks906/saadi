@@ -1,6 +1,33 @@
 import { Pool, PoolClient } from "pg";
 
 let pool: Pool | null = null;
+let initPromise: Promise<void> | null = null;
+
+async function initDatabaseWithPool(poolInstance: Pool): Promise<void> {
+  const client = await poolInstance.connect();
+
+  try {
+    // Read and execute schema SQL
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const schemaPath = path.join(process.cwd(), "src/lib/db/schema.sql");
+    const schemaSQL = await fs.readFile(schemaPath, "utf-8");
+
+    await client.query(schemaSQL);
+    console.log("[DB] Database schema initialized successfully");
+  } catch (error: any) {
+    // If schema file doesn't exist, create tables directly
+    if (error.code === "ENOENT") {
+      console.log("[DB] Schema file not found, creating tables directly...");
+      await createTablesDirectly(client);
+    } else {
+      console.error("[DB] Error initializing database:", error);
+      throw error;
+    }
+  } finally {
+    client.release();
+  }
+}
 
 /**
  * Get or create the PostgreSQL connection pool
@@ -26,6 +53,12 @@ export function getPool(): Pool {
     pool.on("error", (err) => {
       console.error("[DB] Unexpected error on idle client:", err);
     });
+
+    if (!initPromise) {
+      initPromise = initDatabaseWithPool(pool).catch((error) => {
+        console.error("[DB] Initialization failed:", error);
+      });
+    }
   }
 
   return pool;
@@ -36,29 +69,10 @@ export function getPool(): Pool {
  */
 export async function initDatabase(): Promise<void> {
   const pool = getPool();
-  const client = await pool.connect();
-
-  try {
-    // Read and execute schema SQL
-    const fs = await import("fs/promises");
-    const path = await import("path");
-    const schemaPath = path.join(process.cwd(), "src/lib/db/schema.sql");
-    const schemaSQL = await fs.readFile(schemaPath, "utf-8");
-
-    await client.query(schemaSQL);
-    console.log("[DB] Database schema initialized successfully");
-  } catch (error: any) {
-    // If schema file doesn't exist, create tables directly
-    if (error.code === "ENOENT") {
-      console.log("[DB] Schema file not found, creating tables directly...");
-      await createTablesDirectly(client);
-    } else {
-      console.error("[DB] Error initializing database:", error);
-      throw error;
-    }
-  } finally {
-    client.release();
+  if (!initPromise) {
+    initPromise = initDatabaseWithPool(pool);
   }
+  await initPromise;
 }
 
 /**
