@@ -138,7 +138,8 @@ export async function POST(req: NextRequest) {
       
       if (callId) {
         if (status === "started" || status === "ringing" || status === "answered" || status === "in-progress") {
-          return handleCallStarted({
+          return handleCallStarted(
+            {
             ...body,
             call: { 
               ...body.call, 
@@ -147,11 +148,14 @@ export async function POST(req: NextRequest) {
               id: callId 
             },
             type: "call.started",
-          });
+            },
+            org.id
+          );
         }
         
         if (status === "ended" || status === "ended-by-user" || status === "ended-by-system" || status === "completed") {
-          return handleCallEnded({
+          return handleCallEnded(
+            {
             ...body,
             call: { 
               ...body.call, 
@@ -160,7 +164,9 @@ export async function POST(req: NextRequest) {
               id: callId 
             },
             type: "call.ended",
-          });
+            },
+            org.id
+          );
         }
       }
     }
@@ -190,7 +196,8 @@ export async function POST(req: NextRequest) {
         }
         
         // Now update it with end-of-call report data
-        return handleCallEnded({
+        return handleCallEnded(
+          {
           ...body,
           call: { 
             ...existingCall,
@@ -201,7 +208,9 @@ export async function POST(req: NextRequest) {
           type: "call.ended",
           endedAt: report.endedAt || report.endTime || new Date().toISOString(),
           startedAt: report.startedAt || report.startTime || existingCall.startedAt,
-        });
+          },
+          org.id
+        );
       }
     }
 
@@ -213,7 +222,7 @@ export async function POST(req: NextRequest) {
       body.message?.type === "call.started" ||
       (body.status === "started" && body.call)
     ) {
-      return handleCallStarted(body);
+      return handleCallStarted(body, org.id);
     }
 
     // Handle call.ended event (multiple possible formats)
@@ -224,7 +233,7 @@ export async function POST(req: NextRequest) {
       body.message?.type === "call.ended" ||
       (body.status === "ended" && body.call)
     ) {
-      return handleCallEnded(body);
+      return handleCallEnded(body, org.id);
     }
 
     // Handle order.confirmed event (multiple possible formats)
@@ -234,7 +243,7 @@ export async function POST(req: NextRequest) {
       body.event === "order.confirmed" ||
       body.message?.type === "order.confirmed"
     ) {
-      return handleOrderConfirmed(body);
+      return handleOrderConfirmed(body, org.id);
     }
 
     // VAPI sends many message types (transcript, function-call, etc.)
@@ -267,7 +276,7 @@ export async function POST(req: NextRequest) {
 /**
  * Handle call.started event
  */
-async function handleCallStarted(event: any) {
+async function handleCallStarted(event: any, organizationId: string) {
   try {
     const callId = event.call?.id || event.id || event.callId;
     
@@ -280,7 +289,7 @@ async function handleCallStarted(event: any) {
     }
 
     // Check if call already exists
-    let existingCall = await findCallByCallIdByOrganization(callId, org.id);
+    let existingCall = await findCallByCallIdByOrganization(callId, organizationId);
     
     if (existingCall) {
       // Update existing call
@@ -328,7 +337,7 @@ async function handleCallStarted(event: any) {
       });
     } else {
       // Create new call
-      const call = await createCall(event, { organizationId: org.id });
+      const call = await createCall(event, { organizationId });
       const detection = detectBusinessTypeFromCall(event);
       const eventType = event.type || event.event || event.eventType || "call.started";
       
@@ -360,7 +369,7 @@ async function handleCallStarted(event: any) {
 /**
  * Handle call.ended event
  */
-async function handleCallEnded(event: any) {
+async function handleCallEnded(event: any, organizationId: string) {
   try {
     const callId = event.call?.id || event.id || event.callId;
     
@@ -373,7 +382,7 @@ async function handleCallEnded(event: any) {
     }
 
     // Find existing call
-    const existingCall = await findCallByCallIdByOrganization(callId, org.id);
+    const existingCall = await findCallByCallIdByOrganization(callId, organizationId);
     
     if (!existingCall) {
       console.warn("[VAPI Webhook] call.ended: Call not found", callId);
@@ -441,7 +450,7 @@ async function handleCallEnded(event: any) {
 /**
  * Handle order.confirmed event
  */
-async function handleOrderConfirmed(event: any) {
+async function handleOrderConfirmed(event: any, organizationId: string) {
   try {
     const orderId = event.order?.id || event.id || event.orderId;
     
@@ -454,7 +463,7 @@ async function handleOrderConfirmed(event: any) {
     }
 
     // Check if order already exists
-    let existingOrder = await findOrderByOrderIdByOrganization(orderId, org.id);
+    let existingOrder = await findOrderByOrderIdByOrganization(orderId, organizationId);
     
     if (existingOrder) {
       // Update existing order
@@ -478,7 +487,7 @@ async function handleOrderConfirmed(event: any) {
       existingOrder.metadata = { ...existingOrder.metadata, ...(event.order?.metadata || event.metadata) };
       existingOrder.rawEvent = event;
       await updateOrder(existingOrder);
-      void runPrintPipeline(existingOrder, { organizationId: org.id })
+      void runPrintPipeline(existingOrder, { organizationId })
         .then((result) => {
           if (!result.ok) {
             console.error(
@@ -510,17 +519,17 @@ async function handleOrderConfirmed(event: any) {
       });
     } else {
       // Create new order
-      const order = await createOrder(event, { organizationId: org.id });
+      const order = await createOrder(event, { organizationId });
       
       // Optionally link to call if callId is provided
       if (order.callId) {
-        const call = await findCallByCallIdByOrganization(order.callId, org.id);
+        const call = await findCallByCallIdByOrganization(order.callId, organizationId);
         if (call) {
           console.log("[VAPI Webhook] order.confirmed: Linked order to call", call.id);
         }
       }
       
-      void runPrintPipeline(order, { organizationId: org.id })
+      void runPrintPipeline(order, { organizationId })
         .then((result) => {
           if (!result.ok) {
             console.error(
