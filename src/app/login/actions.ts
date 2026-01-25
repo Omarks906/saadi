@@ -44,5 +44,12 @@ export async function loginAction(formData: FormData) {
   }
 
   await setSessionOrgCookies(orgSlug);
-  redirect(next);
+
+  let finalNext = next;
+  if (finalNext.startsWith("/dashboard") && !finalNext.includes("orgSlug=")) {
+    const sep = finalNext.includes("?") ? "&" : "?";
+    finalNext = `${finalNext}${sep}orgSlug=${encodeURIComponent(orgSlug)}`;
+  }
+
+  redirect(finalNext);
 }
