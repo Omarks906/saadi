@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS organizations (
   name TEXT NOT NULL,
   phone TEXT,
   address TEXT,
+  password_hash TEXT,
   settings JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
