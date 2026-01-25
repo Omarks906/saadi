@@ -1,7 +1,7 @@
 "use server";
 
-import { NextResponse } from "next/server";
-import { setSessionOrg } from "@/lib/auth-session";
+import { redirect } from "next/navigation";
+import { setSessionOrgCookies } from "@/lib/auth-session";
 
 type PassMap = Record<string, string>;
 
@@ -21,7 +21,7 @@ function parseMap(raw?: string): PassMap {
   return m;
 }
 
-export async function loginAction(_: any, formData: FormData) {
+export async function loginAction(formData: FormData) {
   const orgSlug = String(formData.get("orgSlug") || "")
     .trim()
     .toLowerCase();
@@ -31,17 +31,18 @@ export async function loginAction(_: any, formData: FormData) {
   const map = parseMap(process.env.ADMIN_PASSWORD_BY_ORG);
 
   if (!orgSlug || !password) {
-    return { ok: false, error: "Missing orgSlug or password" };
+    redirect(`/login?error=missing&next=${encodeURIComponent(next)}`);
   }
 
   const expected = map[orgSlug];
   if (!expected || expected !== password) {
-    return { ok: false, error: "Invalid org or password" };
+    redirect(
+      `/login?error=invalid&next=${encodeURIComponent(next)}&orgSlug=${encodeURIComponent(
+        orgSlug
+      )}`
+    );
   }
 
-  const res = NextResponse.redirect(
-    new URL(next, process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000")
-  );
-  setSessionOrg(res, orgSlug);
-  return res;
+  setSessionOrgCookies(orgSlug);
+  redirect(next);
 }

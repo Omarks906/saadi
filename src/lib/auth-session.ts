@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import crypto from "crypto";
 
 const COOKIE_NAME = "so_org";
@@ -31,6 +32,23 @@ export function setSessionOrg(res: NextResponse, orgSlug: string) {
     path: "/",
   });
   res.cookies.set(SIG_NAME, sign(v), {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+  });
+}
+
+export function setSessionOrgCookies(orgSlug: string) {
+  const v = orgSlug.trim().toLowerCase();
+  const jar = cookies();
+  jar.set(COOKIE_NAME, v, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax",
+    path: "/",
+  });
+  jar.set(SIG_NAME, sign(v), {
     httpOnly: true,
     secure: true,
     sameSite: "lax",

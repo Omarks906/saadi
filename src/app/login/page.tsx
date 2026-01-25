@@ -3,9 +3,11 @@ import { loginAction } from "./actions";
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams?: { next?: string };
+  searchParams?: { next?: string; error?: string; orgSlug?: string };
 }) {
   const next = searchParams?.next || "/dashboard";
+  const error = searchParams?.error;
+  const orgSlug = searchParams?.orgSlug || "";
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
@@ -15,12 +17,19 @@ export default function LoginPage({
         <form action={loginAction} className="space-y-3">
           <input type="hidden" name="next" value={next} />
 
+          {error && (
+            <div className="text-sm text-red-600">
+              {error === "missing" ? "Missing org slug or password." : "Invalid org or password."}
+            </div>
+          )}
+
           <div>
             <label className="text-sm">Org slug</label>
             <input
               name="orgSlug"
               placeholder="chilli"
               className="w-full border rounded px-3 py-2"
+              defaultValue={orgSlug}
               required
             />
           </div>
