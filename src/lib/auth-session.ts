@@ -39,9 +39,9 @@ export function setSessionOrg(res: NextResponse, orgSlug: string) {
   });
 }
 
-export function setSessionOrgCookies(orgSlug: string) {
+export async function setSessionOrgCookies(orgSlug: string) {
   const v = orgSlug.trim().toLowerCase();
-  const jar = cookies();
+  const jar = await cookies();
   jar.set(COOKIE_NAME, v, {
     httpOnly: true,
     secure: true,

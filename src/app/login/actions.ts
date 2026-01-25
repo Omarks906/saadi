@@ -43,6 +43,6 @@ export async function loginAction(formData: FormData) {
     );
   }
 
-  setSessionOrgCookies(orgSlug);
+  await setSessionOrgCookies(orgSlug);
   redirect(next);
 }
