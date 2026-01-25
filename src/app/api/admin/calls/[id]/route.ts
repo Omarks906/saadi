@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readCallByOrganization } from "@/lib/vapi-storage";
-import { resolveOrgContext } from "@/lib/org-context";
+import { requireAdminOrg, toAdminErrorResponse } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 
@@ -16,32 +16,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    // Check authentication
-    const adminToken = req.headers.get("x-admin-token");
-    const requiredToken = process.env.ADMIN_TOKEN;
-
-    if (!requiredToken) {
-      console.error("[Admin] ADMIN_TOKEN environment variable not set");
-      return NextResponse.json(
-        { error: "Server configuration error" },
-        { status: 500 }
-      );
-    }
-
-    if (!adminToken || adminToken !== requiredToken) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
     // Get call ID from params
     const resolvedParams = await Promise.resolve(params);
     const callId = resolvedParams.id;
 
     // Read call from database
     try {
-      const org = await resolveOrgContext(req);
+      const org = await requireAdminOrg(req);
       const call = await readCallByOrganization(callId, org.id);
       return NextResponse.json({ call });
     } catch (error: any) {
@@ -52,17 +33,16 @@ export async function GET(
         );
       }
       console.error(`[Admin] Error reading call ${callId}:`, error);
+      const response = toAdminErrorResponse(error);
       return NextResponse.json(
-        { error: "Failed to read call data" },
-        { status: 500 }
+        { error: response.error },
+        { status: response.status }
       );
     }
   } catch (error: any) {
     console.error("[Admin] Error processing request:", error);
-    return NextResponse.json(
-      { error: error?.message || "Internal server error" },
-      { status: 500 }
-    );
+    const response = toAdminErrorResponse(error);
+    return NextResponse.json({ error: response.error }, { status: response.status });
   }
 }
 

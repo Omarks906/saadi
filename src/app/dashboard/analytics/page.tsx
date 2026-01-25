@@ -1,10 +1,11 @@
 import Link from "next/link";
+import { getAdminTokenForOrg } from "@/lib/admin-token";
 
 export const dynamic = "force-dynamic";
 
 async function getAnalytics(orgSlug?: string) {
   let baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.trim();
-  let adminToken = process.env.ADMIN_TOKEN?.trim();
+  let adminToken = getAdminTokenForOrg(orgSlug)?.trim();
 
   // Validate and clean baseUrl - ensure it's just the URL
   if (baseUrl) {
@@ -83,7 +84,7 @@ export default async function AnalyticsPage({
     : "/dashboard";
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
-  const adminToken = process.env.ADMIN_TOKEN;
+  const adminToken = getAdminTokenForOrg(orgSlug || undefined);
 
   // Check if analytics returned an error object
   if (analytics && 'error' in analytics) {
@@ -132,7 +133,10 @@ export default async function AnalyticsPage({
             )}
             {!adminToken && (
               <li>
-                <code className="bg-yellow-100 px-1 rounded">ADMIN_TOKEN</code> - Admin authentication token
+                <code className="bg-yellow-100 px-1 rounded">
+                  {process.env.ADMIN_TOKEN_BY_ORG ? "ADMIN_TOKEN_BY_ORG" : "ADMIN_TOKEN"}
+                </code>{" "}
+                - Admin authentication token
               </li>
             )}
           </ul>

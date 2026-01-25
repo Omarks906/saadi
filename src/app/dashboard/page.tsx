@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { Call } from "@/lib/vapi-storage";
+import { getAdminTokenForOrg } from "@/lib/admin-token";
 
 export const dynamic = "force-dynamic";
 
 async function getCalls(orgSlug?: string): Promise<Call[]> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
-  const adminToken = process.env.ADMIN_TOKEN;
+  const adminToken = getAdminTokenForOrg(orgSlug || undefined);
 
   if (!baseUrl) {
     console.error("[Dashboard] NEXT_PUBLIC_BASE_URL not set");
@@ -111,7 +112,13 @@ export default async function DashboardPage({
           <h2 className="text-lg font-semibold text-yellow-800 mb-2">Configuration Error</h2>
           <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
             {!baseUrl && <li>NEXT_PUBLIC_BASE_URL is not set in Railway environment variables</li>}
-            {!adminToken && <li>ADMIN_TOKEN is not set in Railway environment variables</li>}
+            {!adminToken && (
+              <li>
+                {process.env.ADMIN_TOKEN_BY_ORG
+                  ? "ADMIN_TOKEN_BY_ORG is missing this org or orgSlug is not set"
+                  : "ADMIN_TOKEN is not set in Railway environment variables"}
+              </li>
+            )}
           </ul>
           <p className="mt-3 text-sm text-yellow-700">
             Please set these in Railway Dashboard → Your Service → Variables tab

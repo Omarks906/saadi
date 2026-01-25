@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getPrintJobById, markPrintJobRetrying } from "@/lib/printing/print-jobs";
 import { findOrderByOrderIdByOrganization } from "@/lib/vapi-storage";
 import { runPrintPipeline } from "@/lib/printing/print-pipeline";
-import { resolveOrgContext } from "@/lib/org-context";
+import { requireAdminOrg, toAdminErrorResponse } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 
@@ -18,27 +18,9 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const adminToken = req.headers.get("x-admin-token");
-    const requiredToken = process.env.ADMIN_TOKEN;
-
-    if (!requiredToken) {
-      console.error("[Admin] ADMIN_TOKEN environment variable not set");
-      return NextResponse.json(
-        { error: "Server configuration error" },
-        { status: 500 }
-      );
-    }
-
-    if (!adminToken || adminToken !== requiredToken) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
     const resolvedParams = await Promise.resolve(params);
     const jobId = resolvedParams.id;
-    const org = await resolveOrgContext(req);
+    const org = await requireAdminOrg(req);
     const organizationId = org.id;
 
     const job = await getPrintJobById({ organizationId, id: jobId });
@@ -83,9 +65,7 @@ export async function POST(
     return NextResponse.json({ ok: true, jobId: updated.id, status: "retrying" });
   } catch (error: any) {
     console.error("[Admin] Error retrying print job:", error);
-    return NextResponse.json(
-      { error: error?.message || "Internal server error" },
-      { status: 500 }
-    );
+    const response = toAdminErrorResponse(error);
+    return NextResponse.json({ error: response.error }, { status: response.status });
   }
 }

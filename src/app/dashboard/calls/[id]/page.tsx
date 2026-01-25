@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { Call } from "@/lib/vapi-storage";
+import { getAdminTokenForOrg } from "@/lib/admin-token";
 
 async function getCall(id: string, orgSlug?: string): Promise<Call | null> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
-  const adminToken = process.env.ADMIN_TOKEN;
+  const adminToken = getAdminTokenForOrg(orgSlug);
 
   if (!baseUrl) {
     console.error("[Dashboard] NEXT_PUBLIC_BASE_URL not set");

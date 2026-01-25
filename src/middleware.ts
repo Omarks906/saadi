@@ -2,22 +2,38 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const AUTH_COOKIE_NAME = "so_auth";
+const ORG_COOKIE_NAME = "so_org";
+const ORG_SIG_NAME = "so_sig";
 
 export function middleware(request: NextRequest) {
-  const isLoginPage = request.nextUrl.pathname === "/login";
+  const pathname = request.nextUrl.pathname;
+  const isLoginPage = pathname === "/login";
   const authCookie = request.cookies.get(AUTH_COOKIE_NAME);
-  const isAuthenticated = authCookie?.value === "1";
+  const orgCookie = request.cookies.get(ORG_COOKIE_NAME);
+  const orgSig = request.cookies.get(ORG_SIG_NAME);
+  const hasOrgSession = Boolean(orgCookie?.value && orgSig?.value);
+  const isAuthenticated = authCookie?.value === "1" || hasOrgSession;
+  const isAdminApi = pathname.startsWith("/api/admin");
 
   // Allow access to login page
   if (isLoginPage) {
     return NextResponse.next();
   }
 
+  if (isAdminApi) {
+    const adminToken = request.headers.get("x-admin-token");
+    if (!adminToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return NextResponse.next();
+  }
+
   // Check if the route requires authentication
   const isProtectedRoute =
-    request.nextUrl.pathname.startsWith("/new") ||
-    request.nextUrl.pathname.startsWith("/listing") ||
-    request.nextUrl.pathname === "/";
+    pathname.startsWith("/new") ||
+    pathname.startsWith("/listing") ||
+    pathname.startsWith("/dashboard") ||
+    pathname === "/";
 
   // For protected pages, redirect to login if not authenticated
   if (isProtectedRoute && !isAuthenticated) {
@@ -36,14 +52,11 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+    "/",
+    "/new/:path*",
+    "/listing/:path*",
+    "/dashboard/:path*",
+    "/api/admin/:path*",
   ],
 };
 

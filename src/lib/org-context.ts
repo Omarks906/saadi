@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getPool, initDatabase } from "@/lib/db/connection";
+import { getSessionOrgSlug } from "@/lib/auth-session";
 
 export type OrgContext = {
   id: string;
@@ -198,24 +199,55 @@ export async function resolveOrgContext(
 ): Promise<OrgContext> {
   await initDatabase();
 
-  const explicitOrgId = getExplicitOrgId(req);
-  if (explicitOrgId) {
-    const org = await loadOrgById(explicitOrgId);
-    if (!org) {
-      throw new Error(`Organization not found for orgId ${explicitOrgId}`);
-    }
-    if (options.log !== false) logResolvedOrg(org);
-    return org;
-  }
+  const isApiRequest = req.nextUrl.pathname.startsWith("/api/");
+  const tryExplicitFirst = isApiRequest;
 
+  const sessionSlug = getSessionOrgSlug(req);
+  const explicitOrgId = getExplicitOrgId(req);
   const explicitSlug = getExplicitOrgSlug(req);
-  if (explicitSlug) {
-    const org = await loadOrgBySlug(explicitSlug);
+
+  const trySession = async () => {
+    if (!sessionSlug) return null;
+    const org = await loadOrgBySlug(sessionSlug);
     if (!org) {
-      throw new Error(`Organization not found for orgSlug ${explicitSlug}`);
+      throw new Error(`Organization not found for session orgSlug ${sessionSlug}`);
     }
     if (options.log !== false) logResolvedOrg(org);
     return org;
+  };
+
+  const tryExplicit = async () => {
+    if (explicitOrgId) {
+      const org = await loadOrgById(explicitOrgId);
+      if (!org) {
+        throw new Error(`Organization not found for orgId ${explicitOrgId}`);
+      }
+      if (options.log !== false) logResolvedOrg(org);
+      return org;
+    }
+
+    if (explicitSlug) {
+      const org = await loadOrgBySlug(explicitSlug);
+      if (!org) {
+        throw new Error(`Organization not found for orgSlug ${explicitSlug}`);
+      }
+      if (options.log !== false) logResolvedOrg(org);
+      return org;
+    }
+
+    return null;
+  };
+
+  if (tryExplicitFirst) {
+    const org = await tryExplicit();
+    if (org) return org;
+    const sessionOrg = await trySession();
+    if (sessionOrg) return sessionOrg;
+  } else {
+    const sessionOrg = await trySession();
+    if (sessionOrg) return sessionOrg;
+    const org = await tryExplicit();
+    if (org) return org;
   }
 
   const defaultSlug = process.env.DEFAULT_ORG_SLUG;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listCallsByOrganization } from "@/lib/vapi-storage";
-import { resolveOrgContext } from "@/lib/org-context";
+import { requireAdminOrg, toAdminErrorResponse } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 
@@ -13,27 +13,8 @@ export const runtime = "nodejs";
  */
 export async function GET(req: NextRequest) {
   try {
-    // Check authentication
-    const adminToken = req.headers.get("x-admin-token");
-    const requiredToken = process.env.ADMIN_TOKEN;
-
-    if (!requiredToken) {
-      console.error("[Admin] ADMIN_TOKEN environment variable not set");
-      return NextResponse.json(
-        { error: "Server configuration error" },
-        { status: 500 }
-      );
-    }
-
-    if (!adminToken || adminToken !== requiredToken) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
     // Get all calls
-    const org = await resolveOrgContext(req);
+    const org = await requireAdminOrg(req);
     const calls = await listCallsByOrganization(org.id);
 
     // Calculate analytics
@@ -85,10 +66,8 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("[Admin] Error processing analytics:", error);
-    return NextResponse.json(
-      { error: error?.message || "Internal server error" },
-      { status: 500 }
-    );
+    const response = toAdminErrorResponse(error);
+    return NextResponse.json({ error: response.error }, { status: response.status });
   }
 }
 

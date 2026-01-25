@@ -1,52 +1,46 @@
-"use client";
+import { loginAction } from "./actions";
 
-import { useState } from "react";
-
-export default function LoginPage() {
-  const [pw, setPw] = useState("");
-  const [err, setErr] = useState<string | null>(null);
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setErr(null);
-
-    const res = await fetch("/api/auth", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: pw }),
-    });
-
-    if (res.ok) {
-      const next = new URLSearchParams(window.location.search).get("next") || "/";
-      window.location.href = next;
-    } else {
-      setErr("Wrong password.");
-    }
-  }
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams?: { next?: string };
+}) {
+  const next = searchParams?.next || "/dashboard";
 
   return (
-    <main className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-sm rounded-2xl border p-6 shadow-sm">
-        <h1 className="text-xl font-semibold">SolutionOps Demo</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Enter password to continue.
-        </p>
+    <div className="min-h-screen flex items-center justify-center p-6">
+      <div className="w-full max-w-sm rounded-xl border p-6">
+        <h1 className="text-2xl font-bold mb-4">Dashboard Login</h1>
 
-        <form onSubmit={onSubmit} className="mt-6 space-y-3">
-          <input
-            className="w-full rounded-xl border p-3"
-            type="password"
-            placeholder="Password"
-            value={pw}
-            onChange={(e) => setPw(e.target.value)}
-          />
-          {err && <div className="text-sm text-red-600">{err}</div>}
-          <button className="w-full rounded-xl bg-black text-white p-3">
-            Enter
+        <form action={loginAction} className="space-y-3">
+          <input type="hidden" name="next" value={next} />
+
+          <div>
+            <label className="text-sm">Org slug</label>
+            <input
+              name="orgSlug"
+              placeholder="chilli"
+              className="w-full border rounded px-3 py-2"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="text-sm">Password</label>
+            <input
+              name="password"
+              type="password"
+              className="w-full border rounded px-3 py-2"
+              required
+            />
+          </div>
+
+          <button className="w-full rounded bg-black text-white py-2">
+            Sign in
           </button>
         </form>
       </div>
-    </main>
+    </div>
   );
 }
 

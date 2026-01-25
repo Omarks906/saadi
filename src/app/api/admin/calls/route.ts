@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Call, listCallsByOrganization } from "@/lib/vapi-storage";
-import { resolveOrgContext } from "@/lib/org-context";
+import { requireAdminOrg, toAdminErrorResponse } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 
@@ -17,25 +17,6 @@ export const runtime = "nodejs";
  */
 export async function GET(req: NextRequest) {
   try {
-    // Check authentication
-    const adminToken = req.headers.get("x-admin-token");
-    const requiredToken = process.env.ADMIN_TOKEN;
-
-    if (!requiredToken) {
-      console.error("[Admin] ADMIN_TOKEN environment variable not set");
-      return NextResponse.json(
-        { error: "Server configuration error" },
-        { status: 500 }
-      );
-    }
-
-    if (!adminToken || adminToken !== requiredToken) {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
     // Parse query parameters
     const searchParams = req.nextUrl.searchParams;
     const businessTypeFilter = searchParams.get("businessType");
@@ -45,17 +26,17 @@ export async function GET(req: NextRequest) {
     // Get all calls from database
     let calls: Call[];
     try {
-      const org = await resolveOrgContext(req);
+      const org = await requireAdminOrg(req);
       calls = await listCallsByOrganization(org.id);
       console.log(`[Admin] Found ${calls.length} calls in database`);
     } catch (error: any) {
-      console.error("[Admin] Error fetching calls from database:", error);
+      const response = toAdminErrorResponse(error);
       return NextResponse.json(
-        { 
-          error: "Failed to fetch calls from database",
-          details: error?.message,
+        {
+          error: response.error,
+          details: error instanceof Error ? error.message : undefined,
         },
-        { status: 500 }
+        { status: response.status }
       );
     }
 
@@ -78,10 +59,8 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("[Admin] Error processing request:", error);
-    return NextResponse.json(
-      { error: error?.message || "Internal server error" },
-      { status: 500 }
-    );
+    const response = toAdminErrorResponse(error);
+    return NextResponse.json({ error: response.error }, { status: response.status });
   }
 }
 
