@@ -75,12 +75,20 @@ export default async function CallDetailPage({
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <Link
-        href={dashboardHref}
-        className="text-blue-600 hover:text-blue-800 underline mb-4 inline-block"
-      >
-        ← Back to Dashboard
-      </Link>
+      <div className="flex items-center justify-between mb-6">
+        <Link
+          href={dashboardHref}
+          className="text-blue-600 hover:text-blue-800 underline"
+        >
+          ← Back to Dashboard
+        </Link>
+        <Link
+          href="/logout"
+          className="px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+        >
+          Logout
+        </Link>
+      </div>
 
       <h1 className="text-3xl font-bold mb-6">Call Details</h1>
 
