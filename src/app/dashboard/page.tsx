@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Call } from "@/lib/vapi-storage";
 import { getAdminTokenForOrg } from "@/lib/admin-token";
+import { getSessionOrgSlugFromCookies } from "@/lib/auth-session";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +84,10 @@ export default async function DashboardPage({
 }: {
   searchParams?: { orgSlug?: string };
 }) {
-  const orgSlug = searchParams?.orgSlug?.trim() || null;
+  const orgSlug =
+    searchParams?.orgSlug?.trim() ||
+    (await getSessionOrgSlugFromCookies()) ||
+    null;
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const adminToken = process.env.ADMIN_TOKEN;
   const calls = await getCalls(orgSlug || undefined);

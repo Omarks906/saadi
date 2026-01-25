@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Call } from "@/lib/vapi-storage";
 import { getAdminTokenForOrg } from "@/lib/admin-token";
+import { getSessionOrgSlugFromCookies } from "@/lib/auth-session";
 
 async function getCall(id: string, orgSlug?: string): Promise<Call | null> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
@@ -52,7 +53,10 @@ export default async function CallDetailPage({
   searchParams?: { orgSlug?: string };
 }) {
   const resolvedParams = await Promise.resolve(params);
-  const orgSlug = searchParams?.orgSlug?.trim() || null;
+  const orgSlug =
+    searchParams?.orgSlug?.trim() ||
+    (await getSessionOrgSlugFromCookies()) ||
+    null;
   const call = await getCall(resolvedParams.id, orgSlug || undefined);
   const dashboardHref = orgSlug
     ? `/dashboard?orgSlug=${encodeURIComponent(orgSlug)}`

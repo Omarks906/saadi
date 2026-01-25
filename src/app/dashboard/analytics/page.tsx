@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getAdminTokenForOrg } from "@/lib/admin-token";
+import { getSessionOrgSlugFromCookies } from "@/lib/auth-session";
 
 export const dynamic = "force-dynamic";
 
@@ -77,7 +78,10 @@ export default async function AnalyticsPage({
 }: {
   searchParams?: { orgSlug?: string };
 }) {
-  const orgSlug = searchParams?.orgSlug?.trim() || null;
+  const orgSlug =
+    searchParams?.orgSlug?.trim() ||
+    (await getSessionOrgSlugFromCookies()) ||
+    null;
   const analytics = await getAnalytics(orgSlug || undefined);
   const dashboardHref = orgSlug
     ? `/dashboard?orgSlug=${encodeURIComponent(orgSlug)}`

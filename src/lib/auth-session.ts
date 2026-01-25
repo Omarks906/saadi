@@ -23,6 +23,15 @@ export function getSessionOrgSlug(req: NextRequest): string | null {
   return v;
 }
 
+export async function getSessionOrgSlugFromCookies(): Promise<string | null> {
+  const jar = await cookies();
+  const v = jar.get(COOKIE_NAME)?.value;
+  const sig = jar.get(SIG_NAME)?.value;
+  if (!v || !sig) return null;
+  if (sign(v) !== sig) return null;
+  return v;
+}
+
 export function setSessionOrg(res: NextResponse, orgSlug: string) {
   const v = orgSlug.trim().toLowerCase();
   res.cookies.set(COOKIE_NAME, v, {
