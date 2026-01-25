@@ -3,7 +3,7 @@ import { Call } from "@/lib/vapi-storage";
 
 export const dynamic = "force-dynamic";
 
-async function getCalls(): Promise<Call[]> {
+async function getCalls(orgSlug?: string): Promise<Call[]> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const adminToken = process.env.ADMIN_TOKEN;
 
@@ -18,7 +18,12 @@ async function getCalls(): Promise<Call[]> {
   }
 
   try {
-    const response = await fetch(`${baseUrl}/api/admin/calls?limit=50`, {
+    const url = new URL(`${baseUrl}/api/admin/calls`);
+    url.searchParams.set("limit", "50");
+    if (orgSlug) {
+      url.searchParams.set("orgSlug", orgSlug);
+    }
+    const response = await fetch(url.toString(), {
       headers: {
         "x-admin-token": adminToken,
       },
@@ -38,7 +43,7 @@ async function getCalls(): Promise<Call[]> {
   }
 }
 
-async function getFailedPrintJobsCount(): Promise<number> {
+async function getFailedPrintJobsCount(orgSlug?: string): Promise<number> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const adminToken = process.env.ADMIN_TOKEN;
 
@@ -47,7 +52,12 @@ async function getFailedPrintJobsCount(): Promise<number> {
   }
 
   try {
-    const response = await fetch(`${baseUrl}/api/admin/print-jobs?status=failed`, {
+    const url = new URL(`${baseUrl}/api/admin/print-jobs`);
+    url.searchParams.set("status", "failed");
+    if (orgSlug) {
+      url.searchParams.set("orgSlug", orgSlug);
+    }
+    const response = await fetch(url.toString(), {
       headers: {
         "x-admin-token": adminToken,
       },
@@ -67,11 +77,19 @@ async function getFailedPrintJobsCount(): Promise<number> {
   }
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: { orgSlug?: string };
+}) {
+  const orgSlug = searchParams?.orgSlug?.trim() || null;
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const adminToken = process.env.ADMIN_TOKEN;
-  const calls = await getCalls();
-  const failedPrintJobs = await getFailedPrintJobsCount();
+  const calls = await getCalls(orgSlug || undefined);
+  const failedPrintJobs = await getFailedPrintJobsCount(orgSlug || undefined);
+  const analyticsHref = orgSlug
+    ? `/dashboard/analytics?orgSlug=${encodeURIComponent(orgSlug)}`
+    : "/dashboard/analytics";
 
   // Show configuration errors if env vars are missing
   const hasConfigError = !baseUrl || !adminToken;
@@ -81,7 +99,7 @@ export default async function DashboardPage() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Calls Dashboard</h1>
         <Link
-          href="/dashboard/analytics"
+          href={analyticsHref}
           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
         >
           View Analytics

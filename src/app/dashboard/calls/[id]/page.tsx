@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Call } from "@/lib/vapi-storage";
 
-async function getCall(id: string): Promise<Call | null> {
+async function getCall(id: string, orgSlug?: string): Promise<Call | null> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const adminToken = process.env.ADMIN_TOKEN;
 
@@ -16,7 +16,11 @@ async function getCall(id: string): Promise<Call | null> {
   }
 
   try {
-    const response = await fetch(`${baseUrl}/api/admin/calls/${id}`, {
+    const url = new URL(`${baseUrl}/api/admin/calls/${id}`);
+    if (orgSlug) {
+      url.searchParams.set("orgSlug", orgSlug);
+    }
+    const response = await fetch(url.toString(), {
       headers: {
         "x-admin-token": adminToken,
       },
@@ -41,17 +45,23 @@ async function getCall(id: string): Promise<Call | null> {
 
 export default async function CallDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }> | { id: string };
+  searchParams?: { orgSlug?: string };
 }) {
   const resolvedParams = await Promise.resolve(params);
-  const call = await getCall(resolvedParams.id);
+  const orgSlug = searchParams?.orgSlug?.trim() || null;
+  const call = await getCall(resolvedParams.id, orgSlug || undefined);
+  const dashboardHref = orgSlug
+    ? `/dashboard?orgSlug=${encodeURIComponent(orgSlug)}`
+    : "/dashboard";
 
   if (!call) {
     return (
       <div className="container mx-auto px-4 py-8">
         <Link
-          href="/dashboard"
+          href={dashboardHref}
           className="text-blue-600 hover:text-blue-800 underline mb-4 inline-block"
         >
           ← Back to Dashboard
@@ -65,7 +75,7 @@ export default async function CallDetailPage({
   return (
     <div className="container mx-auto px-4 py-8">
       <Link
-        href="/dashboard"
+        href={dashboardHref}
         className="text-blue-600 hover:text-blue-800 underline mb-4 inline-block"
       >
         ← Back to Dashboard

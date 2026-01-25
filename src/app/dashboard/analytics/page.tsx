@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-async function getAnalytics() {
+async function getAnalytics(orgSlug?: string) {
   let baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.trim();
   let adminToken = process.env.ADMIN_TOKEN?.trim();
 
@@ -37,10 +37,13 @@ async function getAnalytics() {
   }
 
   try {
-    const url = `${baseUrl}/api/admin/analytics`;
+    const url = new URL(`${baseUrl}/api/admin/analytics`);
+    if (orgSlug) {
+      url.searchParams.set("orgSlug", orgSlug);
+    }
     console.log("[Analytics] Fetching from:", url);
     
-    const response = await fetch(url, {
+    const response = await fetch(url.toString(), {
       headers: {
         "x-admin-token": adminToken,
       },
@@ -68,8 +71,16 @@ function formatDuration(seconds: number | null): string {
   return `${minutes}m ${secs}s`;
 }
 
-export default async function AnalyticsPage() {
-  const analytics = await getAnalytics();
+export default async function AnalyticsPage({
+  searchParams,
+}: {
+  searchParams?: { orgSlug?: string };
+}) {
+  const orgSlug = searchParams?.orgSlug?.trim() || null;
+  const analytics = await getAnalytics(orgSlug || undefined);
+  const dashboardHref = orgSlug
+    ? `/dashboard?orgSlug=${encodeURIComponent(orgSlug)}`
+    : "/dashboard";
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const adminToken = process.env.ADMIN_TOKEN;
@@ -79,7 +90,7 @@ export default async function AnalyticsPage() {
     return (
       <div className="container mx-auto px-4 py-8">
         <Link
-          href="/dashboard"
+          href={dashboardHref}
           className="text-blue-600 hover:text-blue-800 underline mb-4 inline-block"
         >
           ← Back to Dashboard
@@ -102,7 +113,7 @@ export default async function AnalyticsPage() {
     return (
       <div className="container mx-auto px-4 py-8">
         <Link
-          href="/dashboard"
+          href={dashboardHref}
           className="text-blue-600 hover:text-blue-800 underline mb-4 inline-block"
         >
           ← Back to Dashboard
@@ -136,7 +147,7 @@ export default async function AnalyticsPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <Link
-        href="/dashboard"
+        href={dashboardHref}
         className="text-blue-600 hover:text-blue-800 underline mb-4 inline-block"
       >
         ← Back to Dashboard
