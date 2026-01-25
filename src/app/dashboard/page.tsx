@@ -46,7 +46,7 @@ async function getCalls(orgSlug?: string): Promise<Call[]> {
 
 async function getFailedPrintJobsCount(orgSlug?: string): Promise<number> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
-  const adminToken = process.env.ADMIN_TOKEN;
+  const adminToken = getAdminTokenForOrg(orgSlug || undefined);
 
   if (!baseUrl || !adminToken) {
     return 0;
