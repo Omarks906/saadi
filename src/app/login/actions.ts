@@ -1,6 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
 import { setSessionOrgCookies } from "@/lib/auth-session";
 import { getPool, initDatabase } from "@/lib/db/connection";
@@ -49,6 +50,13 @@ export async function loginAction(formData: FormData) {
     );
   }
 
+  const jar = await cookies();
+  jar.set("so_auth", "1", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+  });
   await setSessionOrgCookies(orgSlug);
 
   let finalNext = next;
