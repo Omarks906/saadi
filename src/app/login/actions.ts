@@ -5,24 +5,6 @@ import bcrypt from "bcryptjs";
 import { setSessionOrgCookies } from "@/lib/auth-session";
 import { getPool, initDatabase } from "@/lib/db/connection";
 
-type PassMap = Record<string, string>;
-
-function parseMap(raw?: string): PassMap {
-  if (!raw) return {};
-  const entries = raw
-    .split(",")
-    .map((e) => e.trim())
-    .filter(Boolean);
-
-  const m: PassMap = {};
-  for (const entry of entries) {
-    const [slugRaw, passRaw] = entry.split(/[:=]/).map((p) => p.trim());
-    if (!slugRaw || !passRaw) continue;
-    m[slugRaw.toLowerCase()] = passRaw;
-  }
-  return m;
-}
-
 export async function loginAction(formData: FormData) {
   const orgSlug = String(formData.get("orgSlug") || "")
     .trim()
