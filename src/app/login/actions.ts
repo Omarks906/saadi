@@ -1,7 +1,9 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import bcrypt from "bcryptjs";
 import { setSessionOrgCookies } from "@/lib/auth-session";
+import { getPool, initDatabase } from "@/lib/db/connection";
 
 type PassMap = Record<string, string>;
 
@@ -28,14 +30,36 @@ export async function loginAction(formData: FormData) {
   const password = String(formData.get("password") || "").trim();
   const next = String(formData.get("next") || "/dashboard").trim();
 
-  const map = parseMap(process.env.ADMIN_PASSWORD_BY_ORG);
-
   if (!orgSlug || !password) {
     redirect(`/login?error=missing&next=${encodeURIComponent(next)}`);
   }
 
-  const expected = map[orgSlug];
-  if (!expected || expected !== password) {
+  await initDatabase();
+  const pool = getPool();
+  const orgResult = await pool.query(
+    "SELECT id, slug, password_hash FROM organizations WHERE slug = $1 LIMIT 1",
+    [orgSlug]
+  );
+
+  if (orgResult.rows.length === 0) {
+    redirect(
+      `/login?error=invalid&next=${encodeURIComponent(next)}&orgSlug=${encodeURIComponent(
+        orgSlug
+      )}`
+    );
+  }
+
+  const passwordHash = orgResult.rows[0]?.password_hash as string | null;
+  if (!passwordHash) {
+    redirect(
+      `/login?error=unset&next=${encodeURIComponent(next)}&orgSlug=${encodeURIComponent(
+        orgSlug
+      )}`
+    );
+  }
+
+  const matches = await bcrypt.compare(password, passwordHash);
+  if (!matches) {
     redirect(
       `/login?error=invalid&next=${encodeURIComponent(next)}&orgSlug=${encodeURIComponent(
         orgSlug

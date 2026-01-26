@@ -19,7 +19,11 @@ export default function LoginPage({
 
           {error && (
             <div className="text-sm text-red-600">
-              {error === "missing" ? "Missing org slug or password." : "Invalid org or password."}
+              {error === "missing"
+                ? "Missing org slug or password."
+                : error === "unset"
+                ? "Password not set for this org."
+                : "Invalid org or password."}
             </div>
           )}
 
