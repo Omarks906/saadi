@@ -8,6 +8,10 @@ const ORG_SIG_NAME = "so_sig";
 export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isLoginPage = pathname === "/login";
+  const isPrefetch =
+    request.headers.get("next-router-prefetch") === "1" ||
+    request.headers.get("purpose") === "prefetch" ||
+    request.headers.get("x-middleware-prefetch") === "1";
   const authCookie = request.cookies.get(AUTH_COOKIE_NAME);
   const orgCookie = request.cookies.get(ORG_COOKIE_NAME);
   const orgSig = request.cookies.get(ORG_SIG_NAME);
@@ -37,6 +41,9 @@ export function middleware(request: NextRequest) {
 
   // For protected pages, redirect to login if not authenticated
   if (isProtectedRoute && !isAuthenticated) {
+    if (isPrefetch) {
+      return NextResponse.next();
+    }
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", request.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
