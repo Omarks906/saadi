@@ -1,5 +1,3 @@
-import { loginAction } from "./actions";
-
 export default function LoginPage({
   searchParams,
 }: {
@@ -14,7 +12,7 @@ export default function LoginPage({
       <div className="w-full max-w-sm rounded-xl border p-6">
         <h1 className="text-2xl font-bold mb-4">Dashboard Login</h1>
 
-        <form action={loginAction} className="space-y-3">
+        <form action="/api/login" method="POST" className="space-y-3">
           <input type="hidden" name="next" value={next} />
 
           {error && (
