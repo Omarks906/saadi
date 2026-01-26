@@ -3,13 +3,22 @@ import bcrypt from "bcryptjs";
 import { getPool, initDatabase } from "@/lib/db/connection";
 import { setSessionOrg } from "@/lib/auth-session";
 
+function getBaseUrl(request: Request) {
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const host = forwardedHost || request.headers.get("host");
+  const proto = request.headers.get("x-forwarded-proto") || "https";
+  const envBase = process.env.NEXT_PUBLIC_BASE_URL?.trim();
+  if (envBase) return envBase;
+  return host ? `${proto}://${host}` : request.url;
+}
+
 function buildLoginRedirect(
-  requestUrl: string,
+  request: Request,
   error: "missing" | "invalid" | "unset",
   next: string,
   orgSlug?: string
 ) {
-  const redirectUrl = new URL("/login", requestUrl);
+  const redirectUrl = new URL("/login", getBaseUrl(request));
   redirectUrl.searchParams.set("error", error);
   redirectUrl.searchParams.set("next", next);
   if (orgSlug) {
@@ -31,7 +40,7 @@ export async function POST(request: Request) {
       : "/dashboard";
 
   if (!orgSlug || !password) {
-    return buildLoginRedirect(request.url, "missing", next, orgSlug);
+    return buildLoginRedirect(request, "missing", next, orgSlug);
   }
 
   await initDatabase();
@@ -42,17 +51,17 @@ export async function POST(request: Request) {
   );
 
   if (orgResult.rows.length === 0) {
-    return buildLoginRedirect(request.url, "invalid", next, orgSlug);
+    return buildLoginRedirect(request, "invalid", next, orgSlug);
   }
 
   const passwordHash = orgResult.rows[0]?.password_hash as string | null;
   if (!passwordHash) {
-    return buildLoginRedirect(request.url, "unset", next, orgSlug);
+    return buildLoginRedirect(request, "unset", next, orgSlug);
   }
 
   const matches = await bcrypt.compare(password, passwordHash);
   if (!matches) {
-    return buildLoginRedirect(request.url, "invalid", next, orgSlug);
+    return buildLoginRedirect(request, "invalid", next, orgSlug);
   }
 
   let finalNext = next || "/dashboard";
@@ -61,7 +70,7 @@ export async function POST(request: Request) {
     finalNext = `${finalNext}${sep}orgSlug=${encodeURIComponent(orgSlug)}`;
   }
 
-  const response = NextResponse.redirect(new URL(finalNext, request.url));
+  const response = NextResponse.redirect(new URL(finalNext, getBaseUrl(request)));
   response.cookies.set("so_auth", "1", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
