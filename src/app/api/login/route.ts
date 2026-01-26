@@ -24,7 +24,11 @@ export async function POST(request: Request) {
     .trim()
     .toLowerCase();
   const password = String(form?.get("password") || "").trim();
-  const next = String(form?.get("next") || "/dashboard").trim();
+  const rawNext = String(form?.get("next") || "/dashboard").trim();
+  const next =
+    rawNext.startsWith("/") && !rawNext.startsWith("//")
+      ? rawNext
+      : "/dashboard";
 
   if (!orgSlug || !password) {
     return buildLoginRedirect(request.url, "missing", next, orgSlug);

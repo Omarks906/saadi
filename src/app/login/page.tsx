@@ -3,7 +3,11 @@ export default function LoginPage({
 }: {
   searchParams?: { next?: string; error?: string; orgSlug?: string };
 }) {
-  const next = searchParams?.next || "/dashboard";
+  const rawNext = searchParams?.next || "/dashboard";
+  const next =
+    rawNext.startsWith("/") && !rawNext.startsWith("//")
+      ? rawNext
+      : "/dashboard";
   const error = searchParams?.error;
   const orgSlug = searchParams?.orgSlug || "";
 
