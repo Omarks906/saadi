@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AnalyticsNavButton } from "@/app/components/AnalyticsNavButton";
 import { Call } from "@/lib/vapi-storage";
 import { getAdminTokenForOrg } from "@/lib/admin-token";
 import { getSessionOrgSlugFromCookies } from "@/lib/auth-session";
@@ -104,12 +105,12 @@ export default async function DashboardPage({
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Calls Dashboard</h1>
         <div className="flex items-center gap-3">
-          <a
+          <AnalyticsNavButton
             href={analyticsHref}
             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
           >
             View Analytics
-          </a>
+          </AnalyticsNavButton>
           <Link
             href="/logout"
             className="px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
