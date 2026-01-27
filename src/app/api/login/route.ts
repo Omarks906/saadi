@@ -70,7 +70,16 @@ export async function POST(request: Request) {
     finalNext = `${finalNext}${sep}orgSlug=${encodeURIComponent(orgSlug)}`;
   }
 
-  const response = NextResponse.redirect(new URL(finalNext, getBaseUrl(request)));
+  const redirectUrl = new URL(finalNext, getBaseUrl(request)).toString();
+  const response = new NextResponse(
+    `<!doctype html><html><head><meta http-equiv="refresh" content="0; url=${redirectUrl}"></head><body>Redirecting...</body></html>`,
+    {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    }
+  );
   response.cookies.set("so_auth", "1", {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
