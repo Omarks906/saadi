@@ -27,24 +27,8 @@ export async function getSessionOrgSlugFromCookies(): Promise<string | null> {
   const jar = await cookies();
   const v = jar.get(COOKIE_NAME)?.value;
   const sig = jar.get(SIG_NAME)?.value;
-  const hasSecret = Boolean(process.env.AUTH_SESSION_SECRET);
-  if (!v || !sig) {
-    console.log("[auth-session] missing cookie(s)", {
-      hasOrg: Boolean(v),
-      hasSig: Boolean(sig),
-      hasSecret,
-    });
-    return null;
-  }
-  if (!hasSecret) {
-    console.warn("[auth-session] missing AUTH_SESSION_SECRET");
-    return null;
-  }
-  const valid = sign(v) === sig;
-  if (!valid) {
-    console.log("[auth-session] signature mismatch", { hasSecret });
-    return null;
-  }
+  if (!v || !sig) return null;
+  if (sign(v) !== sig) return null;
   return v;
 }
 

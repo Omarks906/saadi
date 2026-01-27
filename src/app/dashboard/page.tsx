@@ -80,6 +80,76 @@ async function getFailedPrintJobsCount(orgSlug?: string): Promise<number> {
   }
 }
 
+type ChilliOrder = {
+  id: string;
+  createdAt: string;
+  status: string;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  fulfillmentType?: string | null;
+  address?: string | null;
+  items?: Array<{ name: string; quantity: number; price?: number; description?: string }>;
+  total?: number | null;
+  notes?: string;
+};
+
+async function getOrders(orgSlug?: string): Promise<ChilliOrder[]> {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  const adminToken = getAdminTokenForOrg(orgSlug || undefined);
+
+  if (!baseUrl || !adminToken || !orgSlug) {
+    return [];
+  }
+
+  try {
+    const url = new URL(`${baseUrl}/api/admin/orders`);
+    url.searchParams.set("limit", "20");
+    url.searchParams.set("orgSlug", orgSlug);
+    const response = await fetch(url.toString(), {
+      headers: {
+        "x-admin-token": adminToken,
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      console.error(`[Dashboard] Failed to fetch orders: ${response.status}`);
+      return [];
+    }
+
+    const data = await response.json();
+    return data.orders || [];
+  } catch (error) {
+    console.error("[Dashboard] Error fetching orders:", error);
+    return [];
+  }
+}
+
+function isToday(iso?: string): boolean {
+  if (!iso) return false;
+  const d = new Date(iso);
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 1);
+  return d >= start && d < end;
+}
+
+function isTransfer(call: Call): boolean {
+  const meta = call.metadata || {};
+  const raw = call.rawEvent || {};
+  return Boolean(
+    meta.transfer ||
+      meta.transferred ||
+      meta.forwarded ||
+      meta.forwardedTo ||
+      raw.transfer ||
+      raw.transferred ||
+      raw.forwarded ||
+      raw.forwardedTo
+  );
+}
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -89,16 +159,219 @@ export default async function DashboardPage({
     searchParams?.orgSlug?.trim() ||
     (await getSessionOrgSlugFromCookies()) ||
     null;
+  const isChilli = orgSlug === "chilli";
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const adminToken = process.env.ADMIN_TOKEN;
   const calls = await getCalls(orgSlug || undefined);
+  const orders = isChilli ? await getOrders(orgSlug || undefined) : [];
   const failedPrintJobs = await getFailedPrintJobsCount(orgSlug || undefined);
   const analyticsHref = orgSlug
     ? `/dashboard/analytics?orgSlug=${encodeURIComponent(orgSlug)}`
     : "/dashboard/analytics";
+  const ordersHref = orgSlug
+    ? `/dashboard/orders?orgSlug=${encodeURIComponent(orgSlug)}`
+    : "/dashboard/orders";
 
   // Show configuration errors if env vars are missing
   const hasConfigError = !baseUrl || !adminToken;
+
+  if (isChilli) {
+    const callsToday = calls.filter((call) => isToday(call.createdAt));
+    const ordersToday = orders.filter((order) => isToday(order.createdAt));
+    const transfersToday = callsToday.filter(isTransfer).length;
+    const recentCalls = calls.slice(0, 20);
+    const recentOrders = orders.slice(0, 20);
+
+    return (
+      <div className="container mx-auto px-4 py-8 space-y-8">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Chilli Dashboard</h1>
+            <p className="text-sm text-gray-500">
+              Live overview for today&apos;s activity
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href={ordersHref}
+              prefetch={false}
+              className="px-4 py-2 bg-white border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Kitchen Orders
+            </Link>
+            <AnalyticsNavButton
+              href={analyticsHref}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+            >
+              View Analytics
+            </AnalyticsNavButton>
+            <Link
+              href="/logout"
+              prefetch={false}
+              className="px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Logout
+            </Link>
+          </div>
+        </div>
+
+        {hasConfigError && (
+          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <h2 className="text-lg font-semibold text-yellow-800 mb-2">
+              Configuration Error
+            </h2>
+            <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
+              {!baseUrl && (
+                <li>NEXT_PUBLIC_BASE_URL is not set in Railway environment variables</li>
+              )}
+              {!adminToken && (
+                <li>
+                  {process.env.ADMIN_TOKEN_BY_ORG
+                    ? "ADMIN_TOKEN_BY_ORG is missing this org or orgSlug is not set"
+                    : "ADMIN_TOKEN is not set in Railway environment variables"}
+                </li>
+              )}
+            </ul>
+            <p className="mt-3 text-sm text-yellow-700">
+              Please set these in Railway Dashboard → Your Service → Variables tab
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Calls Today
+            </p>
+            <p className="text-3xl font-bold text-gray-900 mt-2">
+              {callsToday.length}
+            </p>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Orders Today
+            </p>
+            <p className="text-3xl font-bold text-gray-900 mt-2">
+              {ordersToday.length}
+            </p>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Transfers Today
+            </p>
+            <p className="text-3xl font-bold text-gray-900 mt-2">
+              {transfersToday}
+            </p>
+          </div>
+        </div>
+
+        {failedPrintJobs > 0 && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm font-semibold text-red-800">
+              Printing issues: {failedPrintJobs} failed jobs
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Live Calls</h2>
+              <Link
+                href={orgSlug ? `/dashboard?orgSlug=${encodeURIComponent(orgSlug)}` : "/dashboard"}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                View all
+              </Link>
+            </div>
+            {recentCalls.length === 0 ? (
+              <p className="text-sm text-gray-500">No calls yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {recentCalls.map((call) => (
+                  <Link
+                    key={call.id}
+                    href={`/dashboard/calls/${call.id}?orgSlug=${encodeURIComponent(
+                      orgSlug || ""
+                    )}`}
+                    className="block border border-gray-100 rounded-lg p-3 hover:bg-gray-50"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {call.phoneNumber || "Unknown caller"}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {call.createdAt
+                            ? new Date(call.createdAt).toLocaleTimeString()
+                            : "Time unknown"}
+                        </p>
+                      </div>
+                      <span className="text-xs font-semibold uppercase text-gray-500">
+                        {call.status}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Live Orders</h2>
+              <Link
+                href={ordersHref}
+                prefetch={false}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                View kitchen
+              </Link>
+            </div>
+            {recentOrders.length === 0 ? (
+              <p className="text-sm text-gray-500">No orders yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {recentOrders.map((order) => (
+                  <Link
+                    key={order.id}
+                    href={`/dashboard/orders/${encodeURIComponent(
+                      order.id
+                    )}?orgSlug=${encodeURIComponent(orgSlug || "")}`}
+                    className="block border border-gray-100 rounded-lg p-3 hover:bg-gray-50"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">
+                          Order {order.id}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {order.items?.length ? `${order.items.length} items` : "Items pending"}
+                          {order.createdAt
+                            ? ` · ${new Date(order.createdAt).toLocaleTimeString()}`
+                            : ""}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-semibold uppercase text-gray-500">
+                          {order.status}
+                        </span>
+                        {order.total !== undefined && order.total !== null && (
+                          <p className="text-sm font-semibold text-gray-900">
+                            {Number(order.total).toFixed(2)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">

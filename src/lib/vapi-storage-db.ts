@@ -35,6 +35,13 @@ export type Order = {
   status: "confirmed" | "cancelled" | "completed";
   businessType?: BusinessType | null;
   customerId?: string;
+  fulfillmentType?: string;
+  customerName?: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  scheduledFor?: string;
+  specialInstructions?: string;
+  allergies?: string;
   items?: Array<{
     name: string;
     quantity: number;
@@ -136,6 +143,13 @@ function rowToOrder(row: any): Order {
     status: row.status,
     businessType: row.business_type || null,
     customerId: row.customer_id || undefined,
+    fulfillmentType: row.fulfillment_type || undefined,
+    customerName: row.customer_name || undefined,
+    customerPhone: row.customer_phone || undefined,
+    customerAddress: row.customer_address || undefined,
+    scheduledFor: row.scheduled_for || undefined,
+    specialInstructions: row.special_instructions || undefined,
+    allergies: row.allergies || undefined,
     items: row.items || undefined,
     totalAmount: row.total_amount ? parseFloat(row.total_amount) : undefined,
     currency: row.currency || undefined,
@@ -533,6 +547,41 @@ export async function listOrders(): Promise<Order[]> {
     return result.rows.map(rowToOrder);
   } catch (error) {
     console.error("[VAPI Storage DB] Error listing orders:", error);
+    return [];
+  }
+}
+
+export async function listOrdersByOrganization(
+  organizationId: string,
+  options?: { limit?: number; status?: Order["status"]; since?: string }
+): Promise<Order[]> {
+  await ensureDbInitialized();
+  const pool = getPool();
+  const values: Array<string | number> = [organizationId];
+  const where: string[] = ["organization_id = $1"];
+
+  if (options?.status) {
+    values.push(options.status);
+    where.push(`status = $${values.length}`);
+  }
+
+  if (options?.since) {
+    values.push(options.since);
+    where.push(`created_at >= $${values.length}`);
+  }
+
+  let sql = `SELECT * FROM orders WHERE ${where.join(" AND ")} ORDER BY created_at DESC`;
+
+  if (options?.limit) {
+    values.push(options.limit);
+    sql += ` LIMIT $${values.length}`;
+  }
+
+  try {
+    const result = await pool.query(sql, values);
+    return result.rows.map(rowToOrder);
+  } catch (error) {
+    console.error("[VAPI Storage DB] Error listing orders by org:", error);
     return [];
   }
 }
