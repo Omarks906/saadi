@@ -113,6 +113,7 @@ export default async function DashboardPage({
           </AnalyticsNavButton>
           <Link
             href="/logout"
+            prefetch={false}
             className="px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
           >
             Logout
