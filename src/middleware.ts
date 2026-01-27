@@ -39,6 +39,15 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/dashboard") ||
     pathname === "/";
 
+  if (pathname.startsWith("/dashboard")) {
+    console.log("[middleware] dashboard auth check", {
+      hasAuth: authCookie?.value === "1",
+      hasOrg: Boolean(orgCookie?.value),
+      hasSig: Boolean(orgSig?.value),
+      isPrefetch,
+    });
+  }
+
   // For protected pages, redirect to login if not authenticated
   if (isProtectedRoute && !isAuthenticated) {
     if (isPrefetch) {
