@@ -61,6 +61,7 @@ type ChilliOrder = {
   customerPhone?: string | null;
   fulfillmentType?: string | null;
   address?: string | null;
+  scheduledFor?: string | null;
   items?: Array<{
     name: string;
     quantity: number;
