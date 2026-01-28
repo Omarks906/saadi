@@ -22,6 +22,7 @@ export const runtime = "nodejs";
  * Keyed by: event.id or ${event.type}:${callId}:${timestamp}
  */
 const seenEvents = new Set<string>();
+let didDebugOrderPayload = false;
 
 function extractOrderId(payload: any): string | null {
   return (
@@ -36,6 +37,32 @@ function extractOrderId(payload: any): string | null {
     payload?.message?.id ||
     null
   );
+}
+
+function redactPayload(value: any, keyHint?: string): any {
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) {
+    return value.map((entry) => redactPayload(entry, keyHint));
+  }
+  if (typeof value === "object") {
+    const output: Record<string, any> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      const lowerKey = key.toLowerCase();
+      if (lowerKey.includes("phone") || lowerKey.includes("address") || lowerKey.includes("email")) {
+        output[key] = "***";
+        continue;
+      }
+      output[key] = redactPayload(entry, key);
+    }
+    return output;
+  }
+  if (typeof value === "string") {
+    const emailRegex = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+    if ((keyHint || "").toLowerCase().includes("email") || emailRegex.test(value)) {
+      return "***";
+    }
+  }
+  return value;
 }
 
 /**
@@ -277,7 +304,7 @@ export async function POST(req: NextRequest) {
         dataKeys: Object.keys(body?.data || {}),
         messageKeys: Object.keys(body?.message || {}),
       });
-      return handleOrderConfirmed(body, org.id);
+      return handleOrderConfirmed(body, org);
     }
 
     // VAPI sends many message types (transcript, function-call, etc.)
@@ -484,7 +511,10 @@ async function handleCallEnded(event: any, organizationId: string) {
 /**
  * Handle order.confirmed event
  */
-async function handleOrderConfirmed(event: any, organizationId: string) {
+async function handleOrderConfirmed(
+  event: any,
+  org: { id: string; slug?: string | null }
+) {
   try {
     const orderId = extractOrderId(event);
     
@@ -496,8 +526,48 @@ async function handleOrderConfirmed(event: any, organizationId: string) {
       );
     }
 
+    if (!didDebugOrderPayload && process.env.DEBUG_ORDER_PAYLOAD_ONCE === "1") {
+      // Temporary debugging for VAPI payload structure; remove after validation.
+      didDebugOrderPayload = true;
+      const redactedBody = redactPayload(event);
+      console.log(
+        JSON.stringify({
+          tag: "DEBUG_VAPI_ORDER_PAYLOAD_ONCE",
+          timestamp: new Date().toISOString(),
+          org: { id: org.id, slug: org.slug || null },
+          body: redactedBody,
+        })
+      );
+      console.log(
+        JSON.stringify({
+          tag: "DEBUG_VAPI_ORDER_EXTRACT",
+          timestamp: new Date().toISOString(),
+          orderId,
+          callId: event.order?.callId || event.callId || null,
+          items: event.order?.items || event.items || null,
+          total_amount: event.order?.totalAmount || event.totalAmount || null,
+          currency: event.order?.currency || event.currency || null,
+          fulfillment_type:
+            event.order?.fulfillmentType || event.fulfillmentType || null,
+          customer_name: event.order?.customerName || event.customerName || null,
+          customer_phone: event.order?.customerPhone || event.customerPhone || null,
+          customer_address:
+            event.order?.customerAddress || event.customerAddress || null,
+          scheduled_for:
+            event.order?.scheduledFor || event.scheduledFor || null,
+          notes:
+            event.order?.specialInstructions ||
+            event.specialInstructions ||
+            event.order?.notes ||
+            event.notes ||
+            null,
+          allergies: event.order?.allergies || event.allergies || null,
+        })
+      );
+    }
+
     // Check if order already exists
-    let existingOrder = await findOrderByOrderIdByOrganization(orderId, organizationId);
+    let existingOrder = await findOrderByOrderIdByOrganization(orderId, org.id);
     
     if (existingOrder) {
       // Update existing order
@@ -521,7 +591,7 @@ async function handleOrderConfirmed(event: any, organizationId: string) {
       existingOrder.metadata = { ...existingOrder.metadata, ...(event.order?.metadata || event.metadata) };
       existingOrder.rawEvent = event;
       await updateOrder(existingOrder);
-      void runPrintPipeline(existingOrder, { organizationId })
+      void runPrintPipeline(existingOrder, { organizationId: org.id })
         .then((result) => {
           if (!result.ok) {
             console.error(
@@ -539,7 +609,7 @@ async function handleOrderConfirmed(event: any, organizationId: string) {
             JSON.stringify({
               event: "print_exception",
               order_id: existingOrder.orderId,
-              organization_id: existingOrder.tenantId,
+                organization_id: existingOrder.tenantId,
               error: error?.message || String(error),
             })
           );
@@ -553,17 +623,17 @@ async function handleOrderConfirmed(event: any, organizationId: string) {
       });
     } else {
       // Create new order
-      const order = await createOrder(event, { organizationId });
+      const order = await createOrder(event, { organizationId: org.id });
       
       // Optionally link to call if callId is provided
       if (order.callId) {
-        const call = await findCallByCallIdByOrganization(order.callId, organizationId);
+        const call = await findCallByCallIdByOrganization(order.callId, org.id);
         if (call) {
           console.log("[VAPI Webhook] order.confirmed: Linked order to call", call.id);
         }
       }
       
-      void runPrintPipeline(order, { organizationId })
+      void runPrintPipeline(order, { organizationId: org.id })
         .then((result) => {
           if (!result.ok) {
             console.error(
