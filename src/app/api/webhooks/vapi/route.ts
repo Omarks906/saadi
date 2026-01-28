@@ -766,6 +766,35 @@ async function handleEndOfCall(
   const callId = payload.extractedCallId || payload.callId || payload.call?.id;
   if (!callId) return NextResponse.json({ ok: true });
 
+  if (!didDebugOrderPayload && process.env.DEBUG_ORDER_PAYLOAD_ONCE === "1") {
+    // Temporary debugging for end-of-call payload; remove after validation.
+    didDebugOrderPayload = true;
+    const redactedBody = redactPayload(payload);
+    console.log(
+      JSON.stringify({
+        tag: "DEBUG_VAPI_END_OF_CALL_PAYLOAD_ONCE",
+        timestamp: new Date().toISOString(),
+        org: { id: org.id, slug: org.slug || null },
+        body: redactedBody,
+      })
+    );
+    console.log(
+      JSON.stringify({
+        tag: "DEBUG_VAPI_END_OF_CALL_EXTRACT",
+        timestamp: new Date().toISOString(),
+        callId,
+        analysisKeys: Object.keys(payload?.analysis || {}),
+        structuredKeys: Object.keys(payload?.analysis?.structuredOutputs || {}),
+        transcriptKeys: {
+          callTranscript: Boolean(payload?.call?.transcript),
+          transcript: Boolean(payload?.transcript),
+          analysisTranscript: Boolean(payload?.analysis?.transcript),
+          endOfCallTranscript: Boolean(payload?.endOfCallReport?.transcript),
+        },
+      })
+    );
+  }
+
   if (org.slug !== "chilli") {
     return NextResponse.json({ ok: true });
   }
