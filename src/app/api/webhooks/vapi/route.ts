@@ -585,26 +585,46 @@ async function handleOrderConfirmed(
       const callId = event.order?.callId || event.callId || existingOrder.callId;
       
       existingOrder.callId = callId || existingOrder.callId;
-      existingOrder.customerId = event.order?.customerId || event.customerId || existingOrder.customerId;
-      existingOrder.items = event.order?.items || event.items || existingOrder.items;
-      existingOrder.totalAmount = event.order?.totalAmount || event.totalAmount || existingOrder.totalAmount;
-      existingOrder.currency = event.order?.currency || event.currency || existingOrder.currency || "USD";
-      existingOrder.metadata = { ...existingOrder.metadata, ...(event.order?.metadata || event.metadata) };
-      existingOrder.rawEvent = event;
+      existingOrder.customerId =
+        event.order?.customerId || event.customerId || existingOrder.customerId;
 
-      if (org.slug === "chilli" && (!existingOrder.items || existingOrder.items.length === 0)) {
-        const transcript = extractTranscript(event);
-        if (transcript) {
-          const extracted = extractOrderFromTranscript(transcript);
-          if (extracted.items.length > 0) {
-            existingOrder.items = extracted.items.map((item) => ({
-              name: item.name,
-              quantity: item.qty,
-              description: item.notes,
-            }));
-          }
+      const incomingItems = event.order?.items || event.items;
+      const transcript = extractTranscript(event);
+      const useExtracted =
+        (bt ?? existingOrder.businessType) === "restaurant" && Boolean(transcript);
+
+      if (useExtracted && transcript) {
+        const extracted = extractOrderFromTranscript(transcript);
+        existingOrder.items = extracted.items.map((item) => ({
+          name: item.name,
+          quantity: item.qty,
+          description: buildItemNotes(item),
+        }));
+        if (extracted.fulfillment) {
+          existingOrder.fulfillmentType = extracted.fulfillment;
         }
+        existingOrder.metadata = {
+          ...existingOrder.metadata,
+          ...(event.order?.metadata || event.metadata),
+          extraction: {
+            fulfillment: extracted.fulfillment,
+            requestedTime: extracted.requestedTime,
+            confidence: extracted.confidence,
+          },
+        };
+      } else {
+        existingOrder.items = incomingItems || existingOrder.items;
+        existingOrder.metadata = {
+          ...existingOrder.metadata,
+          ...(event.order?.metadata || event.metadata),
+        };
       }
+
+      existingOrder.totalAmount =
+        event.order?.totalAmount || event.totalAmount || existingOrder.totalAmount;
+      existingOrder.currency =
+        event.order?.currency || event.currency || existingOrder.currency || "USD";
+      existingOrder.rawEvent = event;
       await updateOrder(existingOrder);
       void runPrintPipeline(existingOrder, { organizationId: org.id })
         .then((result) => {
@@ -639,20 +659,29 @@ async function handleOrderConfirmed(
     } else {
       // Create new order
       const order = await createOrder(event, { organizationId: org.id });
+      const transcript = extractTranscript(event);
+      const useExtracted =
+        (order.businessType || bt) === "restaurant" && Boolean(transcript);
 
-      if (org.slug === "chilli" && (!order.items || order.items.length === 0)) {
-        const transcript = extractTranscript(event);
-        if (transcript) {
-          const extracted = extractOrderFromTranscript(transcript);
-          if (extracted.items.length > 0) {
-            order.items = extracted.items.map((item) => ({
-              name: item.name,
-              quantity: item.qty,
-              description: item.notes,
-            }));
-            await updateOrder(order);
-          }
+      if (useExtracted && transcript) {
+        const extracted = extractOrderFromTranscript(transcript);
+        order.items = extracted.items.map((item) => ({
+          name: item.name,
+          quantity: item.qty,
+          description: buildItemNotes(item),
+        }));
+        if (extracted.fulfillment) {
+          order.fulfillmentType = extracted.fulfillment;
         }
+        order.metadata = {
+          ...order.metadata,
+          extraction: {
+            fulfillment: extracted.fulfillment,
+            requestedTime: extracted.requestedTime,
+            confidence: extracted.confidence,
+          },
+        };
+        await updateOrder(order);
       }
       
       // Optionally link to call if callId is provided
@@ -718,6 +747,20 @@ function extractTranscript(payload: any): string | null {
   return typeof transcript === "string" && transcript.trim().length > 0
     ? transcript
     : null;
+}
+
+function buildItemNotes(item: {
+  size?: "ordinarie" | "familj";
+  glutenFree?: boolean;
+  mozzarella?: boolean;
+  notes?: string;
+}) {
+  const parts: string[] = [];
+  if (item.size) parts.push(item.size);
+  if (item.glutenFree) parts.push("glutenfri");
+  if (item.mozzarella) parts.push("mozzarella");
+  if (item.notes) parts.push(item.notes);
+  return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
 /**
