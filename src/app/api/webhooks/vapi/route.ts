@@ -567,6 +567,11 @@ async function handleOrderConfirmed(
       );
     }
 
+    const assistantId = extractAssistantId(event);
+    if (!assistantId) console.warn("[VAPI] assistantId missing");
+    const bt = getBusinessTypeFromAssistantId(assistantId);
+    if (assistantId && !bt) console.warn("[VAPI] assistantId not in map:", assistantId);
+
     // Check if order already exists
     let existingOrder = await findOrderByOrderIdByOrganization(orderId, org.id);
     
@@ -575,11 +580,6 @@ async function handleOrderConfirmed(
       existingOrder.status = "confirmed";
       existingOrder.confirmedAt = event.confirmedAt || event.timestamp || new Date().toISOString();
       
-      // Set businessType from assistantId mapping
-      const assistantId = extractAssistantId(event);
-      if (!assistantId) console.warn("[VAPI] assistantId missing");
-      const bt = getBusinessTypeFromAssistantId(assistantId);
-      if (assistantId && !bt) console.warn("[VAPI] assistantId not in map:", assistantId);
       existingOrder.businessType = bt ?? existingOrder.businessType;
       
       const callId = event.order?.callId || event.callId || existingOrder.callId;
