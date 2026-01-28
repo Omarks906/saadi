@@ -251,7 +251,7 @@ export async function POST(req: NextRequest) {
         }
         
         // Now update it with end-of-call report data
-        return handleCallEnded(
+        const response = await handleCallEnded(
           {
           ...body,
           call: { 
@@ -266,6 +266,20 @@ export async function POST(req: NextRequest) {
           },
           org.id
         );
+        void handleEndOfCall(
+          {
+            ...body,
+            extractedCallId: callId,
+            analysis:
+              report.analysis ||
+              body.analysis ||
+              body.message?.analysis ||
+              body.data?.analysis ||
+              null,
+          },
+          org
+        );
+        return response;
       }
     }
 
@@ -729,6 +743,84 @@ async function handleOrderConfirmed(
       { status: 500 }
     );
   }
+}
+
+async function handleEndOfCall(
+  payload: any,
+  org: { id: string; slug?: string | null }
+) {
+  const callId = payload.extractedCallId || payload.callId || payload.call?.id;
+  if (!callId) return NextResponse.json({ ok: true });
+
+  const analysis = payload.analysis ?? {};
+  const order = analysis.order ?? analysis.structuredOutputs?.order;
+
+  if (!order || !order.items?.length) {
+    console.log("[order] No order found in analysis", { callId });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (org.slug !== "chilli") {
+    console.log("[order] Ignored non-chilli order", org.slug);
+    return NextResponse.json({ ok: true });
+  }
+
+  const orderId = order.id || order.orderId || callId;
+  const normalizedItems = order.items.map((item: any) => ({
+    name: item.name || item.item || item.title || "unknown",
+    quantity: item.qty || item.quantity || 1,
+    description: item.notes || item.note || item.description,
+  }));
+  const extraction = {
+    fulfillment: order.fulfillment || order.fulfillmentType || null,
+    requestedTime: order.requestedTime || order.requested_for || null,
+    confidence: order.confidence ?? null,
+    customerPhone: payload.message?.customer?.number || null,
+    address: order.address || null,
+  };
+  const totalAmount = order.total ?? order.totalAmount ?? null;
+  const currency = order.currency || null;
+
+  let existingOrder = await findOrderByOrderIdByOrganization(orderId, org.id);
+  if (existingOrder) {
+    existingOrder.status = "confirmed";
+    existingOrder.confirmedAt = new Date().toISOString();
+    existingOrder.callId = callId;
+    existingOrder.items = normalizedItems;
+    existingOrder.totalAmount = totalAmount ?? existingOrder.totalAmount;
+    existingOrder.currency = currency || existingOrder.currency;
+    existingOrder.metadata = {
+      ...existingOrder.metadata,
+      extraction,
+    };
+    existingOrder.rawEvent = payload;
+    await updateOrder(existingOrder);
+    return NextResponse.json({ ok: true });
+  }
+
+  const orderEvent = {
+    ...payload,
+    order: {
+      ...payload.order,
+      id: orderId,
+      items: normalizedItems,
+      totalAmount: totalAmount ?? undefined,
+      currency: currency || undefined,
+      metadata: {
+        ...(payload.order?.metadata || {}),
+        extraction,
+      },
+    },
+    callId,
+    confirmedAt: new Date().toISOString(),
+  };
+  const created = await createOrder(orderEvent, { organizationId: org.id });
+  created.metadata = {
+    ...created.metadata,
+    extraction,
+  };
+  await updateOrder(created);
+  return NextResponse.json({ ok: true });
 }
 
 function extractTranscript(payload: any): string | null {
