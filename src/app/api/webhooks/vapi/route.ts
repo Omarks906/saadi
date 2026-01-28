@@ -14,6 +14,7 @@ import { getBusinessTypeFromAssistantId } from "@/lib/vapi-assistant-map";
 import { detectBusinessTypeFromCall, shouldSwitch } from "@/lib/business-type-detector";
 import { runPrintPipeline } from "@/lib/printing/print-pipeline";
 import { resolveOrgContextForWebhook } from "@/lib/org-context";
+import { extractOrderFromTranscript } from "@/lib/order-extract";
 
 export const runtime = "nodejs";
 
@@ -590,6 +591,20 @@ async function handleOrderConfirmed(
       existingOrder.currency = event.order?.currency || event.currency || existingOrder.currency || "USD";
       existingOrder.metadata = { ...existingOrder.metadata, ...(event.order?.metadata || event.metadata) };
       existingOrder.rawEvent = event;
+
+      if (org.slug === "chilli" && (!existingOrder.items || existingOrder.items.length === 0)) {
+        const transcript = extractTranscript(event);
+        if (transcript) {
+          const extracted = extractOrderFromTranscript(transcript);
+          if (extracted.items.length > 0) {
+            existingOrder.items = extracted.items.map((item) => ({
+              name: item.name,
+              quantity: item.qty,
+              description: item.notes,
+            }));
+          }
+        }
+      }
       await updateOrder(existingOrder);
       void runPrintPipeline(existingOrder, { organizationId: org.id })
         .then((result) => {
@@ -624,6 +639,21 @@ async function handleOrderConfirmed(
     } else {
       // Create new order
       const order = await createOrder(event, { organizationId: org.id });
+
+      if (org.slug === "chilli" && (!order.items || order.items.length === 0)) {
+        const transcript = extractTranscript(event);
+        if (transcript) {
+          const extracted = extractOrderFromTranscript(transcript);
+          if (extracted.items.length > 0) {
+            order.items = extracted.items.map((item) => ({
+              name: item.name,
+              quantity: item.qty,
+              description: item.notes,
+            }));
+            await updateOrder(order);
+          }
+        }
+      }
       
       // Optionally link to call if callId is provided
       if (order.callId) {
@@ -670,6 +700,24 @@ async function handleOrderConfirmed(
       { status: 500 }
     );
   }
+}
+
+function extractTranscript(payload: any): string | null {
+  const transcript =
+    payload?.transcript?.text ||
+    payload?.transcript ||
+    payload?.message?.transcript?.text ||
+    payload?.message?.transcript ||
+    payload?.endOfCallReport?.transcript?.text ||
+    payload?.endOfCallReport?.transcript ||
+    payload?.data?.transcript?.text ||
+    payload?.data?.transcript ||
+    payload?.order?.transcript ||
+    payload?.order?.notes ||
+    payload?.notes;
+  return typeof transcript === "string" && transcript.trim().length > 0
+    ? transcript
+    : null;
 }
 
 /**
