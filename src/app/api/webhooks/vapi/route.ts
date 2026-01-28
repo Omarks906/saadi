@@ -15,6 +15,7 @@ import { detectBusinessTypeFromCall, shouldSwitch } from "@/lib/business-type-de
 import { runPrintPipeline } from "@/lib/printing/print-pipeline";
 import { resolveOrgContextForWebhook } from "@/lib/org-context";
 import { extractOrderFromTranscript } from "@/lib/order-extract";
+import { getPool, initDatabase } from "@/lib/db/connection";
 
 export const runtime = "nodejs";
 
@@ -745,66 +746,68 @@ async function handleOrderConfirmed(
   }
 }
 
+type VapiWebhookPayload = any;
+
+type FinalizedOrder = {
+  status: "CONFIRMED" | "DRAFT";
+  itemsText: string;
+  totalText?: string;
+  customerPhone?: string;
+  customerName?: string;
+  fulfillment?: "pickup" | "delivery";
+  requestedTime?: string;
+  deliveryAddress?: string;
+};
+
 async function handleEndOfCall(
-  payload: any,
+  payload: VapiWebhookPayload,
   org: { id: string; slug?: string | null }
 ) {
   const callId = payload.extractedCallId || payload.callId || payload.call?.id;
   if (!callId) return NextResponse.json({ ok: true });
 
-  const analysis = payload.analysis ?? {};
-  const order = analysis.order ?? analysis.structuredOutputs?.order;
-
-  if (!order || !order.items?.length) {
-    console.log("[order] No order found in analysis", { callId });
-    return NextResponse.json({ ok: true });
-  }
-
   if (org.slug !== "chilli") {
-    console.log("[order] Ignored non-chilli order", org.slug);
     return NextResponse.json({ ok: true });
   }
 
-  const orderId = order.id || order.orderId || callId;
-  const normalizedItems = order.items.map((item: any) => ({
-    name: item.name || item.item || item.title || "unknown",
-    quantity: item.qty || item.quantity || 1,
-    description: item.notes || item.note || item.description,
-  }));
+  await initDatabase();
+  const pool = getPool();
+  const existing = await pool.query(
+    "SELECT id FROM orders WHERE organization_id = $1 AND call_id = $2 LIMIT 1",
+    [org.id, callId]
+  );
+  if (existing.rows.length > 0) {
+    return NextResponse.json({ ok: true });
+  }
+
+  const transcript = getTranscript(payload);
+  const structured = tryExtractStructuredOrder(payload);
+  const fallback = structured ? null : chilliTranscriptFallback(transcript);
+  const finalized = structured || fallback;
+
+  if (!finalized) {
+    return NextResponse.json({ ok: true });
+  }
+
+  const parsedTotal = parseTotalAmount(finalized.totalText);
+  const currency = detectCurrency(finalized.totalText);
+  const items = parseItemsText(finalized.itemsText);
   const extraction = {
-    fulfillment: order.fulfillment || order.fulfillmentType || null,
-    requestedTime: order.requestedTime || order.requested_for || null,
-    confidence: order.confidence ?? null,
-    customerPhone: payload.message?.customer?.number || null,
-    address: order.address || null,
+    itemsText: finalized.itemsText,
+    status: finalized.status,
+    fulfillment: finalized.fulfillment,
+    requestedTime: finalized.requestedTime,
+    confidence: payload?.analysis?.confidence ?? null,
+    transcript,
   };
-  const totalAmount = order.total ?? order.totalAmount ?? null;
-  const currency = order.currency || null;
-
-  let existingOrder = await findOrderByOrderIdByOrganization(orderId, org.id);
-  if (existingOrder) {
-    existingOrder.status = "confirmed";
-    existingOrder.confirmedAt = new Date().toISOString();
-    existingOrder.callId = callId;
-    existingOrder.items = normalizedItems;
-    existingOrder.totalAmount = totalAmount ?? existingOrder.totalAmount;
-    existingOrder.currency = currency || existingOrder.currency;
-    existingOrder.metadata = {
-      ...existingOrder.metadata,
-      extraction,
-    };
-    existingOrder.rawEvent = payload;
-    await updateOrder(existingOrder);
-    return NextResponse.json({ ok: true });
-  }
 
   const orderEvent = {
     ...payload,
     order: {
       ...payload.order,
-      id: orderId,
-      items: normalizedItems,
-      totalAmount: totalAmount ?? undefined,
+      id: callId,
+      items,
+      totalAmount: parsedTotal ?? undefined,
       currency: currency || undefined,
       metadata: {
         ...(payload.order?.metadata || {}),
@@ -814,12 +817,24 @@ async function handleEndOfCall(
     callId,
     confirmedAt: new Date().toISOString(),
   };
+
   const created = await createOrder(orderEvent, { organizationId: org.id });
+  created.customerPhone =
+    finalized.customerPhone || normalizePhone(payload?.call?.customer?.number);
+  created.customerName = finalized.customerName || undefined;
+  created.fulfillmentType = finalized.fulfillment || undefined;
+  created.customerAddress = finalized.deliveryAddress || undefined;
+  if (finalized.status === "CONFIRMED") {
+    created.status = "confirmed";
+  } else {
+    created.status = "confirmed";
+  }
   created.metadata = {
     ...created.metadata,
     extraction,
   };
   await updateOrder(created);
+
   return NextResponse.json({ ok: true });
 }
 
@@ -839,6 +854,132 @@ function extractTranscript(payload: any): string | null {
   return typeof transcript === "string" && transcript.trim().length > 0
     ? transcript
     : null;
+}
+
+function normalizePhone(p?: string) {
+  if (!p) return undefined;
+  return p.replace(/\s+/g, "");
+}
+
+function getTranscript(payload: VapiWebhookPayload): string {
+  return (
+    payload?.call?.transcript ||
+    payload?.transcript ||
+    payload?.analysis?.transcript ||
+    extractTranscript(payload) ||
+    ""
+  );
+}
+
+function tryExtractStructuredOrder(payload: VapiWebhookPayload): FinalizedOrder | null {
+  const so =
+    payload?.call?.analysis?.structuredOutputs ||
+    payload?.analysis?.structuredOutputs ||
+    payload?.call?.analysis?.order ||
+    payload?.analysis?.order;
+
+  if (!so) return null;
+
+  const orderObj = Array.isArray(so) ? so.find((x: any) => x?.type === "order" || x?.order) : so;
+  const o = orderObj?.order || orderObj;
+  if (!o) return null;
+
+  const itemsText =
+    o.itemsText ||
+    (Array.isArray(o.items)
+      ? o.items
+          .map((i: any) => `- ${i.quantity ?? 1}x ${i.name}${i.notes ? ` (${i.notes})` : ""}`)
+          .join("\n")
+      : "");
+
+  const status = (o.status || "").toUpperCase() === "CONFIRMED" ? "CONFIRMED" : "DRAFT";
+  if (!itemsText) return null;
+
+  return {
+    status,
+    itemsText,
+    totalText: o.totalText || o.total || undefined,
+    customerPhone: normalizePhone(o.customerPhone || payload?.call?.customer?.number),
+    customerName: o.customerName,
+    fulfillment: o.fulfillment,
+    requestedTime: o.requestedTime,
+    deliveryAddress: o.deliveryAddress,
+  };
+}
+
+function chilliTranscriptFallback(transcript: string): FinalizedOrder | null {
+  const t = transcript.toLowerCase();
+  const confirmed =
+    t.includes("jag bekräftar") ||
+    t.includes("bekräftar din beställning") ||
+    t.includes("order är bekräftad") ||
+    t.includes("tack för din beställning");
+
+  const menuHits = [
+    "margherita",
+    "vesuvio",
+    "capricciosa",
+    "hawaii",
+    "bussola",
+    "calzone",
+    "al tonno",
+    "opera",
+    "pompei",
+    "chicko banana",
+    "gudfadern",
+    "salami",
+    "bolognese",
+    "vegetarisk",
+    "funge",
+  ].filter((name) => t.includes(name));
+
+  if (!confirmed || menuHits.length === 0) return null;
+
+  const itemsText = menuHits.map((x) => `- 1x ${x}`).join("\n");
+
+  const fulfillment =
+    t.includes("hemkörning") || t.includes("leverans") || t.includes("delivery")
+      ? "delivery"
+      : "pickup";
+
+  return {
+    status: "CONFIRMED",
+    itemsText,
+    fulfillment,
+  };
+}
+
+function parseItemsText(itemsText: string) {
+  const lines = itemsText.split("\n").map((line) => line.trim()).filter(Boolean);
+  return lines.map((line) => {
+    const match = line.match(/-?\s*(\d+)\s*x?\s*(.+?)(?:\s*\((.+)\))?$/i);
+    if (!match) {
+      return { name: line, quantity: 1 };
+    }
+    const quantity = Number(match[1]) || 1;
+    const name = match[2]?.trim() || "unknown";
+    const description = match[3]?.trim();
+    return {
+      name,
+      quantity,
+      description,
+    };
+  });
+}
+
+function parseTotalAmount(totalText?: string) {
+  if (!totalText) return null;
+  const match = totalText.replace(",", ".").match(/(\d+(\.\d+)?)/);
+  return match ? Number(match[1]) : null;
+}
+
+function detectCurrency(totalText?: string) {
+  if (!totalText) return null;
+  const lower = totalText.toLowerCase();
+  if (lower.includes("kr") || lower.includes("sek")) return "SEK";
+  if (lower.includes("eur") || lower.includes("€")) return "EUR";
+  if (lower.includes("usd") || lower.includes("$")) return "USD";
+  return null;
 }
 
 function buildItemNotes(item: {
