@@ -23,6 +23,21 @@ export const runtime = "nodejs";
  */
 const seenEvents = new Set<string>();
 
+function extractOrderId(payload: any): string | null {
+  return (
+    payload?.order?.id ||
+    payload?.id ||
+    payload?.orderId ||
+    payload?.data?.orderId ||
+    payload?.data?.order?.id ||
+    payload?.message?.orderId ||
+    payload?.message?.order?.id ||
+    payload?.data?.id ||
+    payload?.message?.id ||
+    null
+  );
+}
+
 /**
  * Generate a stable key for an event to check idempotency
  */
@@ -102,7 +117,7 @@ export async function POST(req: NextRequest) {
                    body.message?.callId ||
                    body.statusUpdate?.call?.id ||
                    body.endOfCallReport?.call?.id;
-    const orderId = body.order?.id || body.id || body.orderId;
+    const orderId = extractOrderId(body);
     const eventKey = getEventKey(body, (callId || orderId) || undefined);
 
     // Skip if event already processed
@@ -255,6 +270,13 @@ export async function POST(req: NextRequest) {
       body.event === "order.confirmed" ||
       body.message?.type === "order.confirmed"
     ) {
+      const orderId = extractOrderId(body);
+      console.log("[VAPI webhook] order.confirmed", {
+        hasOrderId: !!orderId,
+        keys: Object.keys(body || {}),
+        dataKeys: Object.keys(body?.data || {}),
+        messageKeys: Object.keys(body?.message || {}),
+      });
       return handleOrderConfirmed(body, org.id);
     }
 
@@ -464,7 +486,7 @@ async function handleCallEnded(event: any, organizationId: string) {
  */
 async function handleOrderConfirmed(event: any, organizationId: string) {
   try {
-    const orderId = event.order?.id || event.id || event.orderId;
+    const orderId = extractOrderId(event);
     
     if (!orderId) {
       console.error("[VAPI Webhook] order.confirmed: Missing order ID");
