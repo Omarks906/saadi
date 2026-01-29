@@ -905,17 +905,33 @@ function getTranscript(payload: VapiWebhookPayload): string {
 function tryExtractStructuredOrder(payload: VapiWebhookPayload): FinalizedOrder | null {
   const analysis =
     payload?.message?.analysis || payload?.analysis || payload?.call?.analysis || null;
-  const structuredData = analysis?.structuredData || payload?.message?.analysis?.structuredData;
-  const structuredOutputs =
-    analysis?.structuredOutputs || payload?.message?.analysis?.structuredOutputs;
-  const directOrder = analysis?.order || payload?.call?.analysis?.order;
 
-  let so = structuredData || structuredOutputs || directOrder;
-  if (!so) return null;
+  const structuredData = analysis?.structuredData ?? null;
+  const structuredOutputs = analysis?.structuredOutputs ?? null;
+  const directOrder = analysis?.order || payload?.call?.analysis?.order;
+  const orderStructuredOutputId =
+    process.env.VAPI_CHILLI_ORDER_STRUCTURED_OUTPUT_ID || null;
+
+  const orderFromOutputs =
+    orderStructuredOutputId && structuredOutputs?.[orderStructuredOutputId]
+      ? structuredOutputs[orderStructuredOutputId]
+      : null;
+  const orderByName = structuredOutputs?.order || structuredOutputs?.Order || null;
+
+  let so = orderFromOutputs ?? orderByName ?? structuredData ?? directOrder;
+  if (!so) {
+    console.log("[order] No structured order found", {
+      hasStructuredData: Boolean(structuredData),
+      structuredOutputsKeys: structuredOutputs ? Object.keys(structuredOutputs) : [],
+    });
+    return null;
+  }
 
   if (!Array.isArray(so) && typeof so === "object" && !so.order && !so.itemsText && !so.items) {
     const values = Object.values(so);
-    so = values.find((x: any) => x?.type === "order" || x?.order || x?.itemsText || x?.items) || so;
+    so =
+      values.find((x: any) => x?.type === "order" || x?.order || x?.itemsText || x?.items) ||
+      so;
   }
 
   const orderObj = Array.isArray(so)
