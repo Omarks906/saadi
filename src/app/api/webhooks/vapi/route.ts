@@ -895,21 +895,32 @@ function getTranscript(payload: VapiWebhookPayload): string {
     payload?.call?.transcript ||
     payload?.transcript ||
     payload?.analysis?.transcript ||
+    payload?.message?.analysis?.transcript ||
+    payload?.message?.analysis?.summary ||
     extractTranscript(payload) ||
     ""
   );
 }
 
 function tryExtractStructuredOrder(payload: VapiWebhookPayload): FinalizedOrder | null {
-  const so =
-    payload?.call?.analysis?.structuredOutputs ||
-    payload?.analysis?.structuredOutputs ||
-    payload?.call?.analysis?.order ||
-    payload?.analysis?.order;
+  const analysis =
+    payload?.message?.analysis || payload?.analysis || payload?.call?.analysis || null;
+  const structuredData = analysis?.structuredData || payload?.message?.analysis?.structuredData;
+  const structuredOutputs =
+    analysis?.structuredOutputs || payload?.message?.analysis?.structuredOutputs;
+  const directOrder = analysis?.order || payload?.call?.analysis?.order;
 
+  let so = structuredData || structuredOutputs || directOrder;
   if (!so) return null;
 
-  const orderObj = Array.isArray(so) ? so.find((x: any) => x?.type === "order" || x?.order) : so;
+  if (!Array.isArray(so) && typeof so === "object" && !so.order && !so.itemsText && !so.items) {
+    const values = Object.values(so);
+    so = values.find((x: any) => x?.type === "order" || x?.order || x?.itemsText || x?.items) || so;
+  }
+
+  const orderObj = Array.isArray(so)
+    ? so.find((x: any) => x?.type === "order" || x?.order || x?.itemsText || x?.items)
+    : so;
   const o = orderObj?.order || orderObj;
   if (!o) return null;
 
