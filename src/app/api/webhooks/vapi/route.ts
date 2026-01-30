@@ -373,11 +373,14 @@ type StructuredOrderResult = {
 function extractStructuredOrderFromReport(body: any, report: any): StructuredOrderResult | null {
   const message = body?.message || {};
   const analysis = message.analysis || report?.analysis || {};
-  const structuredOutputs = analysis.structuredOutputs || {};
-  const data = structuredOutputs[STRUCTURED_OUTPUT_ID];
+  const artifact = message.artifact || report?.artifact || {};
+  const structuredOutputs =
+    artifact.structuredOutputs || analysis.structuredOutputs || {};
+  const raw = structuredOutputs[STRUCTURED_OUTPUT_ID];
+  const data = raw?.result ?? raw;
 
   if (!data) {
-    console.error("[order] No structured order found in analysis.structuredOutputs.");
+    console.error("[order] No structured order found in structuredOutputs.");
     console.log("[debug] hasStructuredData:", analysis.hasStructuredData);
     console.log("[debug] Available keys:", Object.keys(structuredOutputs));
     return null;
