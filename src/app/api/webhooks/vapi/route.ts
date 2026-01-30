@@ -67,6 +67,10 @@ function redactPayload(value: any, keyHint?: string): any {
   return value;
 }
 
+const STRUCTURED_OUTPUT_ID =
+  process.env.VAPI_CHILLI_ORDER_STRUCTURED_OUTPUT_ID ||
+  "e8cfb9c2-1892-4b7f-a1f3-a4e97fc9d73e";
+
 /**
  * Generate a stable key for an event to check idempotency
  */
@@ -234,6 +238,16 @@ export async function POST(req: NextRequest) {
       const callId = body.message?.call?.id || report.call?.id || report.id || body.id;
       
       if (callId) {
+        const structuredOrder = extractStructuredOrderFromReport(body, report);
+        if (structuredOrder) {
+          await upsertOrderFromStructuredOutput({
+            body,
+            report,
+            callId,
+            organizationId: org.id,
+            structuredOrder,
+          });
+        }
         // Check if call exists, if not create it first
         let existingCall = await findCallByCallIdByOrganization(callId, org.id);
         
@@ -348,6 +362,214 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     );
   }
+}
+
+type StructuredOrderResult = {
+  outputId: string;
+  data: Record<string, any>;
+  analysis: Record<string, any>;
+};
+
+function extractStructuredOrderFromReport(body: any, report: any): StructuredOrderResult | null {
+  const message = body?.message || {};
+  const analysis = message.analysis || report?.analysis || {};
+  const structuredOutputs = analysis.structuredOutputs || {};
+  const data = structuredOutputs[STRUCTURED_OUTPUT_ID];
+
+  if (!data) {
+    console.error("[order] No structured order found in analysis.structuredOutputs.");
+    console.log("[debug] hasStructuredData:", analysis.hasStructuredData);
+    console.log("[debug] Available keys:", Object.keys(structuredOutputs));
+    return null;
+  }
+
+  return { outputId: STRUCTURED_OUTPUT_ID, data, analysis };
+}
+
+function normalizeOrderItems(items: unknown) {
+  if (!items) return undefined;
+  if (Array.isArray(items)) return items;
+  if (typeof items !== "string") return undefined;
+
+  const raw = items.trim();
+  if (!raw) return undefined;
+
+  const parts = raw
+    .split(/,|;|\n/gi)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .flatMap((part) => part.split(/\s+and\s+/gi).map((p) => p.trim()).filter(Boolean));
+
+  if (!parts.length) return undefined;
+
+  const wordQty: Record<string, number> = {
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+  };
+
+  return parts.map((part) => {
+    const leadingX = part.match(/^(\d+)\s*x\s*(.+)$/i);
+    if (leadingX) {
+      return { name: leadingX[2].trim(), quantity: Number(leadingX[1]) };
+    }
+
+    const trailingX = part.match(/^(.+?)\s*x\s*(\d+)$/i);
+    if (trailingX) {
+      return { name: trailingX[1].trim(), quantity: Number(trailingX[2]) };
+    }
+
+    const parenQty = part.match(/^(.+?)\s*\(x\s*(\d+)\)$/i);
+    if (parenQty) {
+      return { name: parenQty[1].trim(), quantity: Number(parenQty[2]) };
+    }
+
+    const leadingQty = part.match(/^(\d+)\s*(?:x\s*)?(.+)$/i);
+    if (leadingQty) {
+      const qty = Number(leadingQty[1]);
+      const name = leadingQty[2].trim();
+      if (qty > 0 && name) {
+        return { name, quantity: qty };
+      }
+    }
+
+    const trailingQty = part.match(/^(.+?)\s*(?:x\s*)?(\d+)$/i);
+    if (trailingQty) {
+      const qty = Number(trailingQty[2]);
+      const name = trailingQty[1].trim();
+      if (qty > 0 && name) {
+        return { name, quantity: qty };
+      }
+    }
+
+    const ofPhrase = part.match(/^(\d+)\s+\w+\s+of\s+(.+)$/i);
+    if (ofPhrase) {
+      const qty = Number(ofPhrase[1]);
+      const name = ofPhrase[2].trim();
+      if (qty > 0 && name) {
+        return { name, quantity: qty };
+      }
+    }
+
+    const wordQtyMatch = part.match(/^([a-z]+)\s+(.+)$/i);
+    if (wordQtyMatch) {
+      const qty = wordQty[wordQtyMatch[1].toLowerCase()];
+      const name = wordQtyMatch[2].trim();
+      if (qty && name) {
+        return { name, quantity: qty };
+      }
+    }
+
+    const sizePrefix = part.match(/^(small|medium|large|ordinary|family)\s+(.+)$/i);
+    if (sizePrefix) {
+      const size = sizePrefix[1].toLowerCase();
+      const name = sizePrefix[2].trim();
+      if (name) {
+        return { name: `${size} ${name}`, quantity: 1 };
+      }
+    }
+
+    return { name: part, quantity: 1 };
+  });
+}
+
+async function upsertOrderFromStructuredOutput(params: {
+  body: any;
+  report: any;
+  callId: string;
+  organizationId: string;
+  structuredOrder: StructuredOrderResult;
+}) {
+  const { body, report, callId, organizationId, structuredOrder } = params;
+  const { data, outputId } = structuredOrder;
+  const { items, address, fulfillment } = data;
+
+  const orderId =
+    body.order?.id ||
+    report.order?.id ||
+    body.orderId ||
+    data.orderId ||
+    callId;
+
+  const parsedItems = normalizeOrderItems(items);
+  if (!parsedItems || !fulfillment) {
+    console.warn("[order] Structured data found but required fields are empty.");
+    return;
+  }
+
+  const assistantId = extractAssistantId(body);
+  if (!assistantId) console.warn("[VAPI] assistantId missing");
+  const bt = getBusinessTypeFromAssistantId(assistantId);
+  if (assistantId && !bt) console.warn("[VAPI] assistantId not in map:", assistantId);
+
+  const metadata = {
+    structuredOutput: {
+      id: outputId,
+      itemsRaw: items,
+      fulfillment,
+      address,
+    },
+  };
+
+  const structuredEvent = {
+    ...body,
+    order: {
+      id: orderId,
+      callId,
+      items: parsedItems,
+      metadata,
+      customerId: body.message?.customer?.id || body.customer?.id || body.customerId,
+    },
+    items: parsedItems,
+    metadata,
+    confirmedAt: report.endedAt || report.endTime || new Date().toISOString(),
+  };
+
+  const existingOrder = await findOrderByOrderIdByOrganization(orderId, organizationId);
+  if (existingOrder) {
+    existingOrder.status = "confirmed";
+    existingOrder.confirmedAt = structuredEvent.confirmedAt;
+    existingOrder.items = parsedItems;
+    existingOrder.metadata = { ...existingOrder.metadata, ...metadata };
+    existingOrder.rawEvent = structuredEvent;
+    existingOrder.callId = callId;
+    existingOrder.businessType = bt ?? existingOrder.businessType;
+    await updateOrder(existingOrder);
+    console.log("[VAPI Webhook] end-of-call: Updated order from structured output", orderId);
+    void runPrintPipeline(existingOrder, { organizationId }).catch((error) => {
+      console.error(
+        JSON.stringify({
+          event: "print_exception",
+          order_id: existingOrder.orderId,
+          organization_id: existingOrder.tenantId,
+          error: error?.message || String(error),
+        })
+      );
+    });
+    return;
+  }
+
+  const order = await createOrder(structuredEvent, { organizationId });
+  order.businessType = bt ?? order.businessType;
+  await updateOrder(order);
+  console.log("[VAPI Webhook] end-of-call: Created order from structured output", order.id);
+  void runPrintPipeline(order, { organizationId }).catch((error) => {
+    console.error(
+      JSON.stringify({
+        event: "print_exception",
+        order_id: order.orderId,
+        organization_id: order.tenantId,
+        error: error?.message || String(error),
+      })
+    );
+  });
 }
 
 /**
