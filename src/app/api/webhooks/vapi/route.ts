@@ -133,6 +133,10 @@ export async function POST(req: NextRequest) {
       Object.keys(body?.endOfCallReport || {})
     );
     const org = await resolveOrgContextForWebhook(req, body);
+    const resolvedAssistantId = extractAssistantId(body);
+    if (resolvedAssistantId) {
+      console.log("[VAPI Webhook] Resolved assistantId:", resolvedAssistantId);
+    }
     // VAPI sends events in different formats:
     // - body.type (standard)
     // - body.event (alternative)

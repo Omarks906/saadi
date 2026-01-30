@@ -58,10 +58,19 @@ export type Order = {
  * Extract assistantId from payload
  */
 export function extractAssistantId(payload: any): string | undefined {
-  return payload.assistantId || 
-         payload.assistant_id || 
-         payload.call?.assistantId || 
-         payload.call?.assistant_id;
+  return (
+    payload.assistantId ||
+    payload.assistant_id ||
+    payload.assistant?.id ||
+    payload.message?.assistant?.id ||
+    payload.message?.assistantId ||
+    payload.message?.assistant_id ||
+    payload.call?.assistantId ||
+    payload.call?.assistant_id ||
+    payload.call?.assistant?.id ||
+    payload.newAssistant?.id ||
+    payload.message?.newAssistant?.id
+  );
 }
 
 // Initialize database on module load (only once)
