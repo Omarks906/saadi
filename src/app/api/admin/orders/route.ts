@@ -6,6 +6,46 @@ export const runtime = "nodejs";
 
 const ORDER_STATUSES = new Set(["confirmed", "cancelled", "completed"]);
 
+function normalizePhone(value?: string | null) {
+  if (!value) return null;
+  return value.replace(/[^\d+]/g, "").replace(/^00/, "+");
+}
+
+function isPhoneLike(value?: string | null) {
+  if (!value) return false;
+  const compact = value.replace(/[^\d]/g, "");
+  return compact.length >= 7;
+}
+
+function resolveCustomerName(order: any) {
+  const rawName = order.customerName || null;
+  const rawPhone = order.customerPhone || null;
+  const metaName =
+    order.metadata?.structuredOutput?.customerName ||
+    order.metadata?.customerName ||
+    null;
+
+  if (!rawName) return metaName;
+  if (!isPhoneLike(rawName)) return rawName;
+
+  const namePhone = normalizePhone(rawName);
+  const phone = normalizePhone(rawPhone);
+  if (namePhone && phone && namePhone === phone) {
+    return metaName || null;
+  }
+
+  return metaName || null;
+}
+
+function resolveCustomerPhone(order: any) {
+  return (
+    order.customerPhone ||
+    order.metadata?.structuredOutput?.customerPhone ||
+    order.metadata?.customerPhone ||
+    null
+  );
+}
+
 /**
  * GET /api/admin/orders
  * Admin endpoint to list orders with filtering and pagination
@@ -53,8 +93,8 @@ export async function GET(req: NextRequest) {
       createdAt: order.createdAt,
       confirmedAt: order.confirmedAt,
       status: order.status,
-      customerName: order.customerName,
-      customerPhone: order.customerPhone,
+      customerName: resolveCustomerName(order),
+      customerPhone: resolveCustomerPhone(order),
       fulfillmentType: order.fulfillmentType,
       address: order.customerAddress,
       scheduledFor: order.scheduledFor,

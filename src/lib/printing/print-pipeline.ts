@@ -134,20 +134,49 @@ function buildTicketOrder(order: Order): TicketOrder {
   const eventOrder = rawEvent.order || rawEvent.message?.order || rawEvent.statusUpdate?.order;
   const eventCustomer = eventOrder?.customer || metadata.customer;
   const eventRestaurant = eventOrder?.restaurant || metadata.restaurant;
+  const structuredOutput = metadata.structuredOutput || metadata.structured_output;
+  const extraction = metadata.extraction || {};
 
   return {
     restaurantName: metadata.restaurantName || eventRestaurant?.name || metadata.businessName,
     restaurantPhone: metadata.restaurantPhone || eventRestaurant?.phone || metadata.phone,
     orderNumber: order.orderId,
     confirmedAt: order.confirmedAt,
-    fulfillment: metadata.fulfillment || eventOrder?.fulfillment || eventOrder?.type,
+    fulfillment:
+      metadata.fulfillment ||
+      extraction.fulfillment ||
+      structuredOutput?.fulfillment ||
+      order.fulfillmentType ||
+      eventOrder?.fulfillment ||
+      eventOrder?.type,
     items: order.items,
-    notes: metadata.notes || eventOrder?.notes || metadata.specialInstructions,
-    allergies: metadata.allergies || eventOrder?.allergies,
+    notes:
+      metadata.notes ||
+      eventOrder?.notes ||
+      metadata.specialInstructions ||
+      order.specialInstructions,
+    allergies: metadata.allergies || eventOrder?.allergies || order.allergies,
     customer: {
-      name: metadata.customerName || eventCustomer?.name,
-      phone: metadata.customerPhone || eventCustomer?.phone,
-      address: metadata.customerAddress || eventCustomer?.address,
+      name:
+        metadata.customerName ||
+        structuredOutput?.customerName ||
+        eventCustomer?.name ||
+        order.customerName,
+      phone:
+        metadata.customerPhone ||
+        structuredOutput?.customerPhone ||
+        eventCustomer?.phone ||
+        order.customerPhone,
+      address:
+        metadata.customerAddress ||
+        structuredOutput?.address ||
+        eventCustomer?.address ||
+        eventOrder?.customerAddress ||
+        eventOrder?.deliveryAddress ||
+        rawEvent?.customerAddress ||
+        rawEvent?.deliveryAddress ||
+        order.customerAddress ||
+        structuredOutput?.address,
     },
     totalAmount: order.totalAmount,
     currency: order.currency,
@@ -212,6 +241,21 @@ export async function runPrintPipeline(
   }
 
   const ticket = renderTicket(buildTicketOrder(order));
+  if (process.env.PRINT_TEST_MODE === "1") {
+    console.log(
+      JSON.stringify({
+        event: "print_test_mode",
+        organization_id: organizationId,
+        order_id: orderId,
+        printer_target: resolvePrinterTarget(order) || null,
+        created_at: order.createdAt,
+        ticket_text: ticket,
+      })
+    );
+    await store.markSent(organizationId, orderId);
+    return { ok: true, skipped: true, jobId: job?.id || existing?.id };
+  }
+
   const result = await provider.send(ticket, {
     organization_id: organizationId,
     order_id: orderId,

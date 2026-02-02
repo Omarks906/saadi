@@ -295,6 +295,10 @@ export async function POST(req: NextRequest) {
               body.message?.analysis ||
               body.data?.analysis ||
               null,
+            message: body.message || report.message || null,
+            call: body.message?.call || report.call || body.call || null,
+            customer: body.message?.customer || report.customer || body.customer || null,
+            transcript: report.transcript || body.message?.transcript || body.transcript || null,
           },
           org
         );
@@ -374,6 +378,15 @@ type StructuredOrderResult = {
   analysis: Record<string, any>;
 };
 
+let didDebugStructuredOrderOnce = false;
+
+function describeField(value: any): string {
+  if (value === null || value === undefined) return "empty";
+  if (typeof value === "string") return "string";
+  if (Array.isArray(value)) return `array(${value.length})`;
+  return typeof value;
+}
+
 function extractStructuredOrderFromReport(body: any, report: any): StructuredOrderResult | null {
   const message = body?.message || {};
   const analysis = message.analysis || report?.analysis || {};
@@ -390,6 +403,26 @@ function extractStructuredOrderFromReport(body: any, report: any): StructuredOrd
     return null;
   }
 
+  if (!didDebugStructuredOrderOnce && process.env.DEBUG_STRUCTURED_ORDER_ONCE === "1") {
+    didDebugStructuredOrderOnce = true;
+    console.log(
+      JSON.stringify({
+        tag: "DEBUG_STRUCTURED_ORDER_ONCE",
+        dataKeys: Object.keys(data || {}),
+        addressFields: {
+          address: describeField(data?.address),
+          deliveryAddress: describeField(data?.deliveryAddress),
+          customerAddress: describeField(data?.customerAddress),
+          customer_address: describeField(data?.customer_address),
+          delivery_address: describeField(data?.delivery_address),
+          addressText: describeField(data?.addressText),
+          customer_address_obj: describeField(data?.customer?.address),
+          delivery_address_obj: describeField(data?.delivery?.address),
+        },
+      })
+    );
+  }
+
   return { outputId: STRUCTURED_OUTPUT_ID, data, analysis };
 }
 
@@ -401,11 +434,73 @@ function normalizeOrderItems(items: unknown) {
   const raw = items.trim();
   if (!raw) return undefined;
 
-  const parts = raw
-    .split(/,|;|\n/gi)
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .flatMap((part) => part.split(/\s+and\s+/gi).map((p) => p.trim()).filter(Boolean));
+  const wordQtyTokens = new Set([
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+  ]);
+  const hasQtyIndicator = (part: string) => {
+    const trimmed = part.trim();
+    if (
+      /^(\d+)\s*x\s*/i.test(trimmed) ||
+      /^.+?\s*x\s*\d+$/i.test(trimmed) ||
+      /^.+?\s*\(x\s*\d+\)$/i.test(trimmed) ||
+      /^(\d+)\s*(?:x\s*)?/.test(trimmed) ||
+      /^.+?\s*(?:x\s*)?\d+$/i.test(trimmed) ||
+      /^(\d+)\s+\w+\s+of\s+/i.test(trimmed)
+    ) {
+      return true;
+    }
+    const wordQtyMatch = trimmed.match(/^([a-z]+)\s+.+/i);
+    return Boolean(wordQtyMatch && wordQtyTokens.has(wordQtyMatch[1].toLowerCase()));
+  };
+
+  const splitIntoCandidates = (text: string) => {
+    const lines = text
+      .split(/;|\n/gi)
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .flatMap((part) => part.split(/\s+and\s+/gi).map((p) => p.trim()).filter(Boolean));
+
+    const candidates: Array<{ itemText: string; description?: string }> = [];
+    for (const line of lines) {
+      const commaParts = line
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+      if (commaParts.length <= 1) {
+        candidates.push({ itemText: line });
+        continue;
+      }
+
+      const itemLikeCount = commaParts.filter(hasQtyIndicator).length;
+      if (itemLikeCount >= 2) {
+        commaParts.forEach((itemText) => candidates.push({ itemText }));
+        continue;
+      }
+
+      const [itemText, ...rest] = commaParts;
+      candidates.push({
+        itemText,
+        description: rest.join(", "),
+      });
+    }
+
+    return candidates;
+  };
+
+  const normalizeItemName = (name: string) =>
+    name.replace(/^(st\.?|styck)\s+/i, "").trim();
+
+  const parts = splitIntoCandidates(raw);
 
   if (!parts.length) return undefined;
 
@@ -422,69 +517,209 @@ function normalizeOrderItems(items: unknown) {
     ten: 10,
   };
 
-  return parts.map((part) => {
-    const leadingX = part.match(/^(\d+)\s*x\s*(.+)$/i);
+  return parts.map(({ itemText, description }) => {
+    const leadingX = itemText.match(/^(\d+)\s*x\s*(.+)$/i);
     if (leadingX) {
-      return { name: leadingX[2].trim(), quantity: Number(leadingX[1]) };
+      const name = normalizeItemName(leadingX[2].trim());
+      return { name, quantity: Number(leadingX[1]), description };
     }
 
-    const trailingX = part.match(/^(.+?)\s*x\s*(\d+)$/i);
+    const trailingX = itemText.match(/^(.+?)\s*x\s*(\d+)$/i);
     if (trailingX) {
-      return { name: trailingX[1].trim(), quantity: Number(trailingX[2]) };
+      const name = normalizeItemName(trailingX[1].trim());
+      return { name, quantity: Number(trailingX[2]), description };
     }
 
-    const parenQty = part.match(/^(.+?)\s*\(x\s*(\d+)\)$/i);
+    const parenQty = itemText.match(/^(.+?)\s*\(x\s*(\d+)\)$/i);
     if (parenQty) {
-      return { name: parenQty[1].trim(), quantity: Number(parenQty[2]) };
+      const name = normalizeItemName(parenQty[1].trim());
+      return { name, quantity: Number(parenQty[2]), description };
     }
 
-    const leadingQty = part.match(/^(\d+)\s*(?:x\s*)?(.+)$/i);
+    const leadingQty = itemText.match(/^(\d+)\s*(?:x\s*)?(.+)$/i);
     if (leadingQty) {
       const qty = Number(leadingQty[1]);
-      const name = leadingQty[2].trim();
+      const name = normalizeItemName(leadingQty[2].trim());
       if (qty > 0 && name) {
-        return { name, quantity: qty };
+        return { name, quantity: qty, description };
       }
     }
 
-    const trailingQty = part.match(/^(.+?)\s*(?:x\s*)?(\d+)$/i);
+    const trailingQty = itemText.match(/^(.+?)\s*(?:x\s*)?(\d+)$/i);
     if (trailingQty) {
       const qty = Number(trailingQty[2]);
-      const name = trailingQty[1].trim();
+      const name = normalizeItemName(trailingQty[1].trim());
       if (qty > 0 && name) {
-        return { name, quantity: qty };
+        return { name, quantity: qty, description };
       }
     }
 
-    const ofPhrase = part.match(/^(\d+)\s+\w+\s+of\s+(.+)$/i);
+    const ofPhrase = itemText.match(/^(\d+)\s+\w+\s+of\s+(.+)$/i);
     if (ofPhrase) {
       const qty = Number(ofPhrase[1]);
-      const name = ofPhrase[2].trim();
+      const name = normalizeItemName(ofPhrase[2].trim());
       if (qty > 0 && name) {
-        return { name, quantity: qty };
+        return { name, quantity: qty, description };
       }
     }
 
-    const wordQtyMatch = part.match(/^([a-z]+)\s+(.+)$/i);
+    const wordQtyMatch = itemText.match(/^([a-z]+)\s+(.+)$/i);
     if (wordQtyMatch) {
       const qty = wordQty[wordQtyMatch[1].toLowerCase()];
-      const name = wordQtyMatch[2].trim();
+      const name = normalizeItemName(wordQtyMatch[2].trim());
       if (qty && name) {
-        return { name, quantity: qty };
+        return { name, quantity: qty, description };
       }
     }
 
-    const sizePrefix = part.match(/^(small|medium|large|ordinary|family)\s+(.+)$/i);
+    const sizePrefix = itemText.match(/^(small|medium|large|ordinary|family)\s+(.+)$/i);
     if (sizePrefix) {
       const size = sizePrefix[1].toLowerCase();
-      const name = sizePrefix[2].trim();
+      const name = normalizeItemName(sizePrefix[2].trim());
       if (name) {
-        return { name: `${size} ${name}`, quantity: 1 };
+        return { name: `${size} ${name}`, quantity: 1, description };
       }
     }
 
-    return { name: part, quantity: 1 };
+    return { name: normalizeItemName(itemText), quantity: 1, description };
   });
+}
+
+function formatStructuredAddress(value: any): string | undefined {
+  if (!value) return undefined;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  }
+  if (typeof value === "object") {
+    const parts = [
+      value.line1,
+      value.line2,
+      value.street,
+      value.city,
+      value.state,
+      value.postalCode,
+      value.postcode,
+      value.country,
+    ].filter(Boolean);
+    if (parts.length) return parts.join(", ");
+  }
+  return undefined;
+}
+
+function extractAddressFromTranscript(transcript?: string | null): string | undefined {
+  if (!transcript) return undefined;
+  const candidates = transcript
+    .split(/\n|[.!?]/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const skipHints = ["repeat", "please", "can you", "could you", "need a clearer", "what street"];
+  for (const candidate of candidates) {
+    const lower = candidate.toLowerCase();
+    if (lower.includes("address") || lower.includes("adress")) {
+      if (skipHints.some((hint) => lower.includes(hint))) continue;
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+function getConversationEntries(payload: any): any[] {
+  const sources = [
+    payload?.message?.conversation,
+    payload?.conversation,
+    payload?.message?.messages,
+    payload?.messages,
+    payload?.message?.artifact?.messages,
+    payload?.artifact?.messages,
+    payload?.message?.artifact?.messagesOpenAIFormatted,
+    payload?.artifact?.messagesOpenAIFormatted,
+  ];
+  return sources.flatMap((source) => (Array.isArray(source) ? source : []));
+}
+
+function extractAddressFromConversation(payload: any): string | undefined {
+  const conversation = getConversationEntries(payload);
+  if (!conversation.length) return undefined;
+
+  const messages = conversation
+    .map((entry: any) => ({
+      role: entry?.role || entry?.type,
+      content: entry?.content || entry?.message || entry?.text,
+    }))
+    .filter((entry: any) => typeof entry.content === "string" && entry.content.trim().length > 0);
+
+  const skipHints = ["repeat", "please", "can you", "could you", "need a clearer", "what street", "spell"];
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const { role, content } = messages[i];
+    if (role && String(role).toLowerCase() !== "user") continue;
+    const text = String(content).trim();
+    const lower = text.toLowerCase();
+    if (lower.includes("address") || lower.includes("adress")) {
+      if (skipHints.some((hint) => lower.includes(hint))) continue;
+      return text;
+    }
+    if (lower.includes("delivery") && (lower.includes(" to ") || lower.startsWith("delivery to"))) {
+      return text;
+    }
+  }
+
+  return undefined;
+}
+
+function extractConversationText(payload: any): string | undefined {
+  const conversation = getConversationEntries(payload);
+  if (!conversation.length) return undefined;
+  const userLines = conversation
+    .map((entry: any) => ({
+      role: entry?.role || entry?.type,
+      content: entry?.content || entry?.message || entry?.text,
+    }))
+    .filter(
+      (entry: any) =>
+        typeof entry.content === "string" &&
+        entry.content.trim().length > 0 &&
+        (!entry.role || String(entry.role).toLowerCase() === "user")
+    )
+    .map((entry: any) => String(entry.content).trim());
+  if (userLines.length) return userLines.join("\n");
+  const allLines = conversation
+    .map((entry: any) => entry?.content || entry?.message || entry?.text)
+    .filter((content: any) => typeof content === "string" && content.trim().length > 0)
+    .map((content: string) => content.trim());
+  return allLines.length ? allLines.join("\n") : undefined;
+}
+
+function extractFulfillmentFromText(text?: string | null): string | undefined {
+  if (!text) return undefined;
+  const t = text.toLowerCase();
+  const deliveryHints = ["delivery", "deliver", "hemkörning", "leverans", "hem", "till mig"];
+  const pickupHints = ["pickup", "pick up", "avhämtning", "avhamtning", "hämta", "hamta", "ta själv"];
+  if (deliveryHints.some((hint) => t.includes(hint))) return "delivery";
+  if (pickupHints.some((hint) => t.includes(hint))) return "pickup";
+  return undefined;
+}
+
+function extractPhoneFromText(text?: string | null): string | undefined {
+  if (!text) return undefined;
+  const match = text.match(/(\+?\d[\d\s\-]{7,}\d)/);
+  if (!match) return undefined;
+  return normalizePhone(match[1]);
+}
+
+function extractAddressFromText(text?: string | null): string | undefined {
+  if (!text) return undefined;
+  const lines = text.split(/\n|[.!?]/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    const idx = Math.max(lower.indexOf("address"), lower.indexOf("adress"));
+    if (idx >= 0) {
+      const cleaned = line.slice(idx).replace(/^(address|adress)\s*(is|är|:)?\s*/i, "");
+      const candidate = cleaned.trim();
+      if (candidate) return candidate;
+    }
+  }
+  return undefined;
 }
 
 async function upsertOrderFromStructuredOutput(params: {
@@ -497,6 +732,72 @@ async function upsertOrderFromStructuredOutput(params: {
   const { body, report, callId, organizationId, structuredOrder } = params;
   const { data, outputId } = structuredOrder;
   const { items, address, fulfillment } = data;
+  const customerName =
+    data.customerName ||
+    data.customer_name ||
+    data.name ||
+    body?.message?.customer?.name ||
+    body?.customer?.name ||
+    body?.message?.call?.customer?.name ||
+    body?.call?.customer?.name ||
+    report?.customer?.name ||
+    report?.call?.customer?.name ||
+    null;
+  const customerPhone =
+    data.phoneNumber ||
+    data.phone_number ||
+    data.phone ||
+    data["phone number"] ||
+    body?.message?.customer?.number ||
+    body?.message?.call?.customer?.number ||
+    body?.customer?.number ||
+    body?.call?.customer?.number ||
+    report?.customer?.number ||
+    report?.call?.customer?.number ||
+    body?.message?.customer?.phone ||
+    body?.customer?.phone ||
+    report?.customer?.phone ||
+    report?.call?.customer?.phone ||
+    null;
+  const transcript =
+    getTranscript(report) ||
+    getTranscript(body) ||
+    report?.transcript ||
+    body?.transcript ||
+    null;
+  const summary =
+    report?.analysis?.summary ||
+    body?.analysis?.summary ||
+    body?.message?.analysis?.summary ||
+    null;
+  const convoAddress = extractAddressFromConversation(body) || extractAddressFromConversation(report);
+  const conversationText = extractConversationText(body) || extractConversationText(report);
+  const extractedAddress =
+    extractAddressFromText(summary) ||
+    extractAddressFromText(transcript) ||
+    extractAddressFromText(conversationText) ||
+    extractAddressFromTranscript(transcript);
+  const extractedFulfillment =
+    extractFulfillmentFromText(summary) ||
+    extractFulfillmentFromText(transcript) ||
+    extractFulfillmentFromText(conversationText) ||
+    "pickup";
+  const extractedPhone =
+    extractPhoneFromText(summary) ||
+    extractPhoneFromText(transcript) ||
+    extractPhoneFromText(conversationText);
+  const addressValue = formatStructuredAddress(
+    address ||
+      data.deliveryAddress ||
+      data.customerAddress ||
+      data.customer?.address ||
+      data.delivery?.address ||
+      data.addressText ||
+      data.delivery_address ||
+      data.customer_address ||
+      extractedAddress ||
+      convoAddress
+  );
 
   const orderId =
     body.order?.id ||
@@ -506,6 +807,21 @@ async function upsertOrderFromStructuredOutput(params: {
     callId;
 
   const parsedItems = normalizeOrderItems(items);
+  if (process.env.DEBUG_ORDER_ITEM_PARSE === "1") {
+    console.log(
+      JSON.stringify({
+        tag: "DEBUG_VAPI_ORDER_ITEM_PATH",
+        timestamp: new Date().toISOString(),
+        path: "end-of-call.structured_output",
+        orderId,
+        callId,
+        itemsRaw: items ?? null,
+        parsedItems,
+        fulfillment,
+        address,
+      })
+    );
+  }
   if (!parsedItems || !fulfillment) {
     console.warn("[order] Structured data found but required fields are empty.");
     return;
@@ -521,8 +837,11 @@ async function upsertOrderFromStructuredOutput(params: {
       id: outputId,
       itemsRaw: items,
       fulfillment,
-      address,
+      address: addressValue,
+      customerName,
+      customerPhone,
     },
+    customerAddress: addressValue,
   };
 
   const structuredEvent = {
@@ -533,9 +852,15 @@ async function upsertOrderFromStructuredOutput(params: {
       items: parsedItems,
       metadata,
       customerId: body.message?.customer?.id || body.customer?.id || body.customerId,
+      customerName,
+      customerPhone,
+      customerAddress: addressValue,
     },
     items: parsedItems,
     metadata,
+    customerName,
+    customerPhone,
+    customerAddress: addressValue,
     confirmedAt: report.endedAt || report.endTime || new Date().toISOString(),
   };
 
@@ -548,6 +873,12 @@ async function upsertOrderFromStructuredOutput(params: {
     existingOrder.rawEvent = structuredEvent;
     existingOrder.callId = callId;
     existingOrder.businessType = bt ?? existingOrder.businessType;
+    existingOrder.customerAddress = addressValue || existingOrder.customerAddress;
+    existingOrder.customerName = customerName || existingOrder.customerName;
+    existingOrder.customerPhone =
+      customerPhone || extractedPhone || existingOrder.customerPhone;
+    existingOrder.fulfillmentType =
+      fulfillment || extractedFulfillment || existingOrder.fulfillmentType;
     await updateOrder(existingOrder);
     console.log("[VAPI Webhook] end-of-call: Updated order from structured output", orderId);
     void runPrintPipeline(existingOrder, { organizationId }).catch((error) => {
@@ -565,6 +896,10 @@ async function upsertOrderFromStructuredOutput(params: {
 
   const order = await createOrder(structuredEvent, { organizationId });
   order.businessType = bt ?? order.businessType;
+  order.customerAddress = addressValue || order.customerAddress;
+  order.customerName = customerName || order.customerName;
+  order.customerPhone = customerPhone || order.customerPhone;
+  order.fulfillmentType = fulfillment || extractedFulfillment || order.fulfillmentType;
   await updateOrder(order);
   console.log("[VAPI Webhook] end-of-call: Created order from structured output", order.id);
   void runPrintPipeline(order, { organizationId }).catch((error) => {
@@ -762,6 +1097,34 @@ async function handleOrderConfirmed(
 ) {
   try {
     const orderId = extractOrderId(event);
+    const incomingName =
+      event.order?.customerName ||
+      event.order?.customer?.name ||
+      event.customerName ||
+      event.customer?.name ||
+      event.message?.customer?.name ||
+      event.call?.customer?.name ||
+      null;
+    const incomingAddress =
+      event.order?.customerAddress ||
+      event.customerAddress ||
+      event.order?.deliveryAddress ||
+      event.deliveryAddress ||
+      event.order?.customer?.address ||
+      event.customer?.address ||
+      null;
+    const incomingPhone =
+      event.order?.customerPhone ||
+      event.customerPhone ||
+      event.order?.customer?.phone ||
+      event.customer?.phone ||
+      event.order?.customer?.number ||
+      event.customer?.number ||
+      event.order?.phoneNumber ||
+      event.phoneNumber ||
+      event.order?.call?.customer?.number ||
+      event.call?.customer?.number ||
+      null;
     
     if (!orderId) {
       console.error("[VAPI Webhook] order.confirmed: Missing order ID");
@@ -831,6 +1194,13 @@ async function handleOrderConfirmed(
       existingOrder.callId = callId || existingOrder.callId;
       existingOrder.customerId =
         event.order?.customerId || event.customerId || existingOrder.customerId;
+      if (incomingName && !existingOrder.customerName) {
+        existingOrder.customerName = incomingName;
+      }
+      existingOrder.customerAddress =
+        incomingAddress || existingOrder.customerAddress;
+      existingOrder.customerPhone =
+        incomingPhone || existingOrder.customerPhone;
 
       const incomingItems = event.order?.items || event.items;
       const transcript = extractTranscript(event);
@@ -839,6 +1209,21 @@ async function handleOrderConfirmed(
 
       if (useExtracted && transcript) {
         const extracted = extractOrderFromTranscript(transcript);
+        if (process.env.DEBUG_ORDER_ITEM_PARSE === "1") {
+          console.log(
+            JSON.stringify({
+              tag: "DEBUG_VAPI_ORDER_ITEM_PATH",
+              timestamp: new Date().toISOString(),
+              path: "order.confirmed.transcript_extract",
+              orderId,
+              callId: existingOrder.callId || event.order?.callId || event.callId || null,
+              hasTranscript: Boolean(transcript),
+              extractedItemsCount: extracted.items.length,
+              extractedItems: extracted.items,
+              incomingItemsRaw: incomingItems ?? null,
+            })
+          );
+        }
         existingOrder.items = extracted.items.map((item) => ({
           name: item.name,
           quantity: item.qty,
@@ -857,6 +1242,24 @@ async function handleOrderConfirmed(
           },
         };
       } else {
+        if (process.env.DEBUG_ORDER_ITEM_PARSE === "1") {
+          console.log(
+            JSON.stringify({
+              tag: "DEBUG_VAPI_ORDER_ITEM_PATH",
+              timestamp: new Date().toISOString(),
+              path: "order.confirmed.incoming_items",
+              orderId,
+              callId: existingOrder.callId || event.order?.callId || event.callId || null,
+              hasTranscript: Boolean(transcript),
+              incomingItemsRaw: incomingItems ?? null,
+              incomingItemsType: Array.isArray(incomingItems)
+                ? "array"
+                : incomingItems
+                ? typeof incomingItems
+                : "null",
+            })
+          );
+        }
         existingOrder.items = incomingItems || existingOrder.items;
         existingOrder.metadata = {
           ...existingOrder.metadata,
@@ -903,12 +1306,30 @@ async function handleOrderConfirmed(
     } else {
       // Create new order
       const order = await createOrder(event, { organizationId: org.id });
+      order.customerName = incomingName || order.customerName;
+      order.customerAddress = incomingAddress || order.customerAddress;
+      order.customerPhone = incomingPhone || order.customerPhone;
       const transcript = extractTranscript(event);
       const useExtracted =
         (order.businessType || bt) === "restaurant" && Boolean(transcript);
 
       if (useExtracted && transcript) {
         const extracted = extractOrderFromTranscript(transcript);
+        if (process.env.DEBUG_ORDER_ITEM_PARSE === "1") {
+          console.log(
+            JSON.stringify({
+              tag: "DEBUG_VAPI_ORDER_ITEM_PATH",
+              timestamp: new Date().toISOString(),
+              path: "order.confirmed.transcript_extract",
+              orderId,
+              callId: order.callId || event.order?.callId || event.callId || null,
+              hasTranscript: Boolean(transcript),
+              extractedItemsCount: extracted.items.length,
+              extractedItems: extracted.items,
+              incomingItemsRaw: event.order?.items || event.items || null,
+            })
+          );
+        }
         order.items = extracted.items.map((item) => ({
           name: item.name,
           quantity: item.qty,
@@ -926,6 +1347,29 @@ async function handleOrderConfirmed(
           },
         };
         await updateOrder(order);
+      } else if (incomingName || incomingAddress) {
+        await updateOrder(order);
+      } else if (incomingPhone) {
+        await updateOrder(order);
+      }
+      if (!useExtracted && process.env.DEBUG_ORDER_ITEM_PARSE === "1") {
+        const incomingItems = event.order?.items || event.items;
+        console.log(
+          JSON.stringify({
+            tag: "DEBUG_VAPI_ORDER_ITEM_PATH",
+            timestamp: new Date().toISOString(),
+            path: "order.confirmed.incoming_items",
+            orderId,
+            callId: order.callId || event.order?.callId || event.callId || null,
+            hasTranscript: Boolean(transcript),
+            incomingItemsRaw: incomingItems ?? null,
+            incomingItemsType: Array.isArray(incomingItems)
+              ? "array"
+              : incomingItems
+              ? typeof incomingItems
+              : "null",
+          })
+        );
       }
       
       // Optionally link to call if callId is provided
@@ -1077,11 +1521,39 @@ async function handleEndOfCall(
   };
 
   const created = await createOrder(orderEvent, { organizationId: org.id });
+  const summary =
+    payload?.analysis?.summary ||
+    payload?.message?.analysis?.summary ||
+    payload?.message?.analysisSummary ||
+    null;
+  const convoText = extractConversationText(payload);
+  const extractedFulfillment =
+    extractFulfillmentFromText(summary) ||
+    extractFulfillmentFromText(getTranscript(payload)) ||
+    extractFulfillmentFromText(convoText) ||
+    "pickup";
+  const extractedAddress =
+    extractAddressFromText(summary) ||
+    extractAddressFromText(getTranscript(payload)) ||
+    extractAddressFromText(convoText) ||
+    extractAddressFromConversation(payload);
+  const extractedPhone =
+    extractPhoneFromText(summary) ||
+    extractPhoneFromText(getTranscript(payload)) ||
+    extractPhoneFromText(convoText);
+
   created.customerPhone =
-    finalized.customerPhone || normalizePhone(payload?.call?.customer?.number);
+    finalized.customerPhone ||
+    normalizePhone(
+      payload?.call?.customer?.number ||
+        payload?.message?.call?.customer?.number ||
+        payload?.message?.customer?.number ||
+        payload?.customer?.number
+    ) ||
+    extractedPhone;
   created.customerName = finalized.customerName || undefined;
-  created.fulfillmentType = finalized.fulfillment || undefined;
-  created.customerAddress = finalized.deliveryAddress || undefined;
+  created.fulfillmentType = finalized.fulfillment || extractedFulfillment || undefined;
+  created.customerAddress = finalized.deliveryAddress || extractedAddress || undefined;
   if (finalized.status === "CONFIRMED") {
     created.status = "confirmed";
   } else {
@@ -1092,6 +1564,30 @@ async function handleEndOfCall(
     extraction,
   };
   await updateOrder(created);
+
+  void runPrintPipeline(created, { organizationId: org.id })
+    .then((result) => {
+      if (!result.ok) {
+        console.error(
+          JSON.stringify({
+            event: "print_failed",
+            order_id: created.orderId,
+            organization_id: created.tenantId,
+            error: result.error || "print_failed",
+          })
+        );
+      }
+    })
+    .catch((error) => {
+      console.error(
+        JSON.stringify({
+          event: "print_exception",
+          order_id: created.orderId,
+          organization_id: created.tenantId,
+          error: error?.message || String(error),
+        })
+      );
+    });
 
   return NextResponse.json({ ok: true });
 }
@@ -1188,7 +1684,13 @@ function tryExtractStructuredOrder(payload: VapiWebhookPayload): FinalizedOrder 
     customerName: o.customerName,
     fulfillment: o.fulfillment,
     requestedTime: o.requestedTime,
-    deliveryAddress: o.deliveryAddress,
+    deliveryAddress:
+      o.deliveryAddress ||
+      o.address ||
+      o.customerAddress ||
+      o.customer?.address ||
+      o.delivery?.address ||
+      o.addressText,
   };
 }
 

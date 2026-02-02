@@ -182,6 +182,12 @@ function orderToRow(order: Order): any {
     status: order.status,
     business_type: order.businessType || null,
     customer_id: order.customerId || null,
+    customer_name: order.customerName || null,
+    customer_phone: order.customerPhone || null,
+    customer_address: order.customerAddress || null,
+    scheduled_for: order.scheduledFor || null,
+    special_instructions: order.specialInstructions || null,
+    allergies: order.allergies || null,
     items: order.items || null,
     total_amount: order.totalAmount || null,
     currency: order.currency || null,
@@ -385,6 +391,37 @@ export async function createOrder(
     status: "confirmed",
     businessType: bt ?? "car",
     customerId: event.order?.customerId || event.customerId,
+    fulfillmentType: event.order?.fulfillmentType || event.fulfillmentType,
+    customerName:
+      event.order?.customerName ||
+      event.customerName ||
+      event.order?.customer?.name ||
+      event.customer?.name ||
+      event.message?.customer?.name ||
+      event.call?.customer?.name,
+    customerPhone:
+      event.order?.customerPhone ||
+      event.customerPhone ||
+      event.order?.customer?.phone ||
+      event.order?.customer?.number ||
+      event.customer?.phone ||
+      event.customer?.number ||
+      event.message?.customer?.number ||
+      event.call?.customer?.number,
+    customerAddress:
+      event.order?.customerAddress ||
+      event.customerAddress ||
+      event.order?.customer?.address ||
+      event.customer?.address ||
+      event.message?.customer?.address ||
+      event.call?.customer?.address,
+    scheduledFor: event.order?.scheduledFor || event.scheduledFor,
+    specialInstructions:
+      event.order?.specialInstructions ||
+      event.specialInstructions ||
+      event.order?.notes ||
+      event.notes,
+    allergies: event.order?.allergies || event.allergies,
     items: event.order?.items || event.items,
     totalAmount: event.order?.totalAmount || event.totalAmount,
     currency: event.order?.currency || event.currency || "USD",
@@ -397,11 +434,16 @@ export async function createOrder(
     `INSERT INTO orders (
       id, order_id, call_id, tenant_id, organization_id,
       created_at, confirmed_at, status,
-      business_type, customer_id, items, total_amount, currency, metadata, raw_event
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+      business_type, customer_id, customer_name, customer_phone, customer_address,
+      scheduled_for, special_instructions, allergies,
+      items, total_amount, currency, metadata, raw_event
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
     [
       row.id, row.order_id, row.call_id, row.tenant_id, row.organization_id,
-      row.created_at, row.confirmed_at, row.status, row.business_type, row.customer_id,
+      row.created_at, row.confirmed_at, row.status,
+      row.business_type, row.customer_id,
+      row.customer_name, row.customer_phone, row.customer_address,
+      row.scheduled_for, row.special_instructions, row.allergies,
       row.items ? JSON.stringify(row.items) : null,
       row.total_amount, row.currency,
       row.metadata ? JSON.stringify(row.metadata) : null,
@@ -444,12 +486,17 @@ export async function updateOrder(order: Order): Promise<void> {
   await pool.query(
     `UPDATE orders SET
       order_id = $2, call_id = $3, confirmed_at = $4, status = $5,
-      business_type = $6, customer_id = $7, items = $8, total_amount = $9,
-      currency = $10, metadata = $11, raw_event = $12
-    WHERE id = $1 AND organization_id = $13`,
+      business_type = $6, customer_id = $7, customer_name = $8, customer_phone = $9,
+      customer_address = $10, scheduled_for = $11, special_instructions = $12,
+      allergies = $13, items = $14, total_amount = $15, currency = $16,
+      metadata = $17, raw_event = $18
+    WHERE id = $1 AND organization_id = $19`,
     [
       row.id, row.order_id, row.call_id, row.confirmed_at, row.status,
       row.business_type, row.customer_id,
+      row.customer_name, row.customer_phone,
+      row.customer_address, row.scheduled_for, row.special_instructions,
+      row.allergies,
       row.items ? JSON.stringify(row.items) : null,
       row.total_amount, row.currency,
       row.metadata ? JSON.stringify(row.metadata) : null,

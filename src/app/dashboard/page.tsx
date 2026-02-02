@@ -103,7 +103,7 @@ async function getOrders(orgSlug?: string): Promise<ChilliOrder[]> {
 
   try {
     const url = new URL(`${baseUrl}/api/admin/orders`);
-    url.searchParams.set("limit", "20");
+    url.searchParams.set("limit", "500");
     url.searchParams.set("orgSlug", orgSlug);
     const response = await fetch(url.toString(), {
       headers: {

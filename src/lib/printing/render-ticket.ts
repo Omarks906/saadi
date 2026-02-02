@@ -104,6 +104,18 @@ function formatModifier(modifier: string | Modifier): string {
   return `${qty}${modifier.name}`.trim();
 }
 
+function formatTwoColumnLine(left: string, right: string): string {
+  const leftTrimmed = left.trim();
+  const rightTrimmed = right.trim();
+  if (!rightTrimmed) return leftTrimmed.slice(0, MAX_LINE_LENGTH);
+  const available = MAX_LINE_LENGTH - rightTrimmed.length;
+  if (available <= 1) {
+    return `${leftTrimmed} ${rightTrimmed}`.slice(0, MAX_LINE_LENGTH);
+  }
+  const leftColumn = leftTrimmed.slice(0, available - 1);
+  return `${leftColumn} ${rightTrimmed}`.padEnd(MAX_LINE_LENGTH, " ");
+}
+
 export function renderTicket(order: TicketOrder): string {
   const lines: string[] = [];
 
@@ -124,6 +136,19 @@ export function renderTicket(order: TicketOrder): string {
   const timeValue = formatTime(order.confirmedAt);
   if (timeValue) {
     lines.push(...toPrintableLine(`Time: ${timeValue}`));
+  }
+
+  if (order.customer?.name && order.customer?.phone) {
+    lines.push(
+      formatTwoColumnLine(
+        `Customer: ${order.customer.name}`,
+        `Phone: ${order.customer.phone}`
+      )
+    );
+  } else if (order.customer?.name) {
+    lines.push(...toPrintableLine(`Customer: ${order.customer.name}`));
+  } else if (order.customer?.phone) {
+    lines.push(...toPrintableLine(`Phone: ${order.customer.phone}`));
   }
 
   const fulfillment = normalizeFulfillment(order.fulfillment);
@@ -160,16 +185,8 @@ export function renderTicket(order: TicketOrder): string {
     lines.push(...toPrintableLine(`Allergies: ${order.allergies}`));
   }
 
-  if (order.customer) {
-    if (order.customer.name) {
-      lines.push(...toPrintableLine(`Customer: ${order.customer.name}`));
-    }
-    if (order.customer.phone) {
-      lines.push(...toPrintableLine(`Phone: ${order.customer.phone}`));
-    }
-    if (order.customer.address) {
-      lines.push(...toPrintableLine(`Address: ${order.customer.address}`));
-    }
+  if (order.customer?.address) {
+    lines.push(...toPrintableLine(`Address: ${order.customer.address}`));
   }
 
   const total = formatMoney(order.totalAmount, order.currency);
