@@ -2,9 +2,13 @@ import { NextRequest } from "next/server";
 import { getPool, initDatabase } from "@/lib/db/connection";
 import { getSessionOrgSlug } from "@/lib/auth-session";
 
+// Supported language codes (ISO 639-1)
+export type SupportedLanguage = "sv" | "en" | "ar" | "fi" | "no" | "da";
+
 export type OrgContext = {
   id: string;
   slug: string;
+  language: SupportedLanguage;
 };
 
 type ResolveOptions = {
@@ -28,34 +32,46 @@ function getExplicitOrgSlug(req: NextRequest): string | null {
 async function loadOrgById(id: string): Promise<OrgContext | null> {
   const pool = getPool();
   const result = await pool.query(
-    "SELECT id, slug FROM organizations WHERE id = $1 LIMIT 1",
+    "SELECT id, slug, language FROM organizations WHERE id = $1 LIMIT 1",
     [id]
   );
   if (result.rows.length === 0) return null;
-  return { id: result.rows[0].id, slug: result.rows[0].slug };
+  return {
+    id: result.rows[0].id,
+    slug: result.rows[0].slug,
+    language: result.rows[0].language || "sv",
+  };
 }
 
 async function loadOrgBySlug(slug: string): Promise<OrgContext | null> {
   const pool = getPool();
   const result = await pool.query(
-    "SELECT id, slug FROM organizations WHERE slug = $1 LIMIT 1",
+    "SELECT id, slug, language FROM organizations WHERE slug = $1 LIMIT 1",
     [slug]
   );
   if (result.rows.length === 0) return null;
-  return { id: result.rows[0].id, slug: result.rows[0].slug };
+  return {
+    id: result.rows[0].id,
+    slug: result.rows[0].slug,
+    language: result.rows[0].language || "sv",
+  };
 }
 
 async function loadFirstOrg(): Promise<OrgContext | null> {
   const pool = getPool();
   const result = await pool.query(
-    "SELECT id, slug FROM organizations ORDER BY created_at ASC LIMIT 1"
+    "SELECT id, slug, language FROM organizations ORDER BY created_at ASC LIMIT 1"
   );
   if (result.rows.length === 0) return null;
-  return { id: result.rows[0].id, slug: result.rows[0].slug };
+  return {
+    id: result.rows[0].id,
+    slug: result.rows[0].slug,
+    language: result.rows[0].language || "sv",
+  };
 }
 
 function logResolvedOrg(org: OrgContext) {
-  console.log(`[org] resolved slug=${org.slug} id=${org.id}`);
+  console.log(`[org] resolved slug=${org.slug} id=${org.id} lang=${org.language}`);
 }
 
 function normalizePhone(value?: string | null): string | null {
@@ -310,7 +326,7 @@ export async function resolveOrgContextForWebhook(
       throw new Error(`Organization not found for phone ${inboundPhone}`);
     }
     console.log(
-      `[org] resolved slug=${org.slug} id=${org.id} reason=phone phone=${inboundPhone}`
+      `[org] resolved slug=${org.slug} id=${org.id} lang=${org.language} reason=phone phone=${inboundPhone}`
     );
     return org;
   }

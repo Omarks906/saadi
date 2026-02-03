@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS organizations (
   phone TEXT,
   address TEXT,
   password_hash TEXT,
+  language VARCHAR(10) NOT NULL DEFAULT 'sv',
   settings JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
@@ -65,9 +66,12 @@ CREATE TABLE IF NOT EXISTS organizations (
 ALTER TABLE organizations
   ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
-INSERT INTO organizations (slug, name)
-VALUES ('chilli', 'Restaurang & Pizzeria Chilli')
-ON CONFLICT (slug) DO NOTHING;
+-- Add language column if it doesn't exist (for existing databases)
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS language VARCHAR(10) NOT NULL DEFAULT 'sv';
+
+INSERT INTO organizations (slug, name, language)
+VALUES ('chilli', 'Restaurang & Pizzeria Chilli', 'sv')
+ON CONFLICT (slug) DO UPDATE SET language = COALESCE(organizations.language, 'sv');
 
 -- Print Jobs Table
 CREATE TABLE IF NOT EXISTS print_jobs (
@@ -173,4 +177,5 @@ CREATE INDEX IF NOT EXISTS idx_orders_org_status_created_at ON orders(organizati
 CREATE INDEX IF NOT EXISTS idx_orders_org_order_id ON orders(organization_id, order_id);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_org_created_at ON print_jobs(organization_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_status_created_at ON print_jobs(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_organizations_language ON organizations(language);
 
