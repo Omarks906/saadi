@@ -17,6 +17,9 @@ export {
   listCallsByOrganization,
   listOrders,
   listOrdersByOrganization,
+  updateOrderStatusByOrganization,
+  getOrderStatsByOrganization,
   type Call,
   type Order,
+  type OrderStatus,
 } from "./vapi-storage-db";

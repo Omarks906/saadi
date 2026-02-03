@@ -3,6 +3,7 @@ import { AnalyticsNavButton } from "@/app/components/AnalyticsNavButton";
 import { Call } from "@/lib/vapi-storage";
 import { getAdminTokenForOrg } from "@/lib/admin-token";
 import { getSessionOrgSlugFromCookies } from "@/lib/auth-session";
+import { isCurrentlyOpen, getTodaysHours, getEstimatedPrepTime } from "@/lib/chilli/config";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +126,44 @@ async function getOrders(orgSlug?: string): Promise<ChilliOrder[]> {
   }
 }
 
+type OrderStats = {
+  total: number;
+  byStatus: Record<string, number>;
+  totalRevenue: number;
+  averageOrderValue: number;
+  activeOrders: number;
+};
+
+async function getOrderStats(orgSlug?: string): Promise<OrderStats | null> {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  const adminToken = getAdminTokenForOrg(orgSlug || undefined);
+
+  if (!baseUrl || !adminToken || !orgSlug) {
+    return null;
+  }
+
+  try {
+    const url = new URL(`${baseUrl}/api/admin/stats`);
+    url.searchParams.set("period", "today");
+    url.searchParams.set("orgSlug", orgSlug);
+    const response = await fetch(url.toString(), {
+      headers: {
+        "x-admin-token": adminToken,
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    return data.stats || null;
+  } catch {
+    return null;
+  }
+}
+
 function isToday(iso?: string): boolean {
   if (!iso) return false;
   const d = new Date(iso);
@@ -181,17 +220,57 @@ export default async function DashboardPage({
     const transfersToday = callsToday.filter(isTransfer).length;
     const recentCalls = calls.slice(0, 20);
     const recentOrders = orders.slice(0, 20);
+    const stats = await getOrderStats(orgSlug || undefined);
+
+    // Restaurant status
+    const isOpen = isCurrentlyOpen();
+    const todaysHours = getTodaysHours();
+    const prepTime = getEstimatedPrepTime();
+
+    // Active orders (not completed or cancelled)
+    const activeOrders = ordersToday.filter(
+      (o) => !["completed", "cancelled"].includes(o.status)
+    );
+
+    const menuHref = orgSlug
+      ? `/dashboard/menu?orgSlug=${encodeURIComponent(orgSlug)}`
+      : "/dashboard/menu";
 
     return (
       <div className="container mx-auto px-4 py-8 space-y-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-3xl font-bold">Chilli Dashboard</h1>
-            <p className="text-sm text-gray-500">
-              Live overview for today&apos;s activity
-            </p>
+            <div className="flex items-center gap-3 mt-1">
+              <div className="flex items-center gap-1.5">
+                <span
+                  className={`inline-block w-2.5 h-2.5 rounded-full ${
+                    isOpen ? "bg-green-500" : "bg-red-500"
+                  }`}
+                />
+                <span className="text-sm text-gray-600">
+                  {isOpen ? "Open" : "Closed"}
+                </span>
+              </div>
+              {todaysHours && !todaysHours.closed && (
+                <span className="text-sm text-gray-400">
+                  {todaysHours.open} - {todaysHours.close}
+                </span>
+              )}
+              <span className="text-sm text-gray-400">|</span>
+              <span className="text-sm text-gray-500">
+                Est. prep: {prepTime} min
+              </span>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href={menuHref}
+              prefetch={false}
+              className="px-4 py-2 bg-white border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+            >
+              View Menu
+            </Link>
             <Link
               href={ordersHref}
               prefetch={false}
@@ -238,7 +317,7 @@ export default async function DashboardPage({
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
               Calls Today
@@ -257,13 +336,86 @@ export default async function DashboardPage({
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Transfers Today
+              Active Orders
+            </p>
+            <p className="text-3xl font-bold text-orange-600 mt-2">
+              {activeOrders.length}
+            </p>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Revenue Today
+            </p>
+            <p className="text-3xl font-bold text-green-600 mt-2">
+              {stats ? `${stats.totalRevenue.toFixed(0)} kr` : "—"}
+            </p>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Transfers
             </p>
             <p className="text-3xl font-bold text-gray-900 mt-2">
               {transfersToday}
             </p>
           </div>
         </div>
+
+        {/* Order Status Breakdown */}
+        {stats && stats.total > 0 && (
+          <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Order Status Today</h3>
+            <div className="flex flex-wrap gap-4">
+              {stats.byStatus.confirmed > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-blue-500" />
+                  <span className="text-sm text-gray-600">
+                    {stats.byStatus.confirmed} Confirmed
+                  </span>
+                </div>
+              )}
+              {stats.byStatus.preparing > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-yellow-500" />
+                  <span className="text-sm text-gray-600">
+                    {stats.byStatus.preparing} Preparing
+                  </span>
+                </div>
+              )}
+              {stats.byStatus.ready > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-green-500" />
+                  <span className="text-sm text-gray-600">
+                    {stats.byStatus.ready} Ready
+                  </span>
+                </div>
+              )}
+              {stats.byStatus.out_for_delivery > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-purple-500" />
+                  <span className="text-sm text-gray-600">
+                    {stats.byStatus.out_for_delivery} Out for Delivery
+                  </span>
+                </div>
+              )}
+              {stats.byStatus.completed > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-gray-400" />
+                  <span className="text-sm text-gray-600">
+                    {stats.byStatus.completed} Completed
+                  </span>
+                </div>
+              )}
+              {stats.byStatus.cancelled > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-red-500" />
+                  <span className="text-sm text-gray-600">
+                    {stats.byStatus.cancelled} Cancelled
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {failedPrintJobs > 0 && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg">

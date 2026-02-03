@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findOrderByOrderIdByOrganization } from "@/lib/vapi-storage";
+import {
+  findOrderByOrderIdByOrganization,
+  updateOrderStatusByOrganization,
+  type OrderStatus,
+} from "@/lib/vapi-storage";
 import { requireAdminOrg, toAdminErrorResponse } from "@/lib/admin-auth";
+
+const VALID_STATUSES: OrderStatus[] = [
+  "confirmed",
+  "preparing",
+  "ready",
+  "out_for_delivery",
+  "completed",
+  "cancelled",
+];
 
 export const runtime = "nodejs";
 
@@ -90,6 +103,87 @@ export async function GET(
       return NextResponse.json({ order: responseOrder });
     } catch (error: any) {
       console.error(`[Admin] Error reading order ${orderId}:`, error);
+      const response = toAdminErrorResponse(error);
+      return NextResponse.json(
+        { error: response.error },
+        { status: response.status }
+      );
+    }
+  } catch (error: any) {
+    console.error("[Admin] Error processing request:", error);
+    const response = toAdminErrorResponse(error);
+    return NextResponse.json({ error: response.error }, { status: response.status });
+  }
+}
+
+/**
+ * PATCH /api/admin/orders/:id
+ * Update order status
+ *
+ * Body:
+ * - status: New status ("confirmed" | "preparing" | "ready" | "out_for_delivery" | "completed" | "cancelled")
+ *
+ * Headers:
+ * - x-admin-token: Must match ADMIN_TOKEN environment variable
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> | { id: string } }
+) {
+  try {
+    const resolvedParams = await Promise.resolve(params);
+    const orderId = resolvedParams.id;
+
+    try {
+      const org = await requireAdminOrg(req);
+      if (org.slug !== "chilli") {
+        return NextResponse.json({ error: "Not available" }, { status: 404 });
+      }
+
+      const body = await req.json();
+      const newStatus = body.status as OrderStatus;
+
+      if (!newStatus || !VALID_STATUSES.includes(newStatus)) {
+        return NextResponse.json(
+          {
+            error: "Invalid status",
+            validStatuses: VALID_STATUSES,
+          },
+          { status: 400 }
+        );
+      }
+
+      const order = await updateOrderStatusByOrganization(orderId, org.id, newStatus);
+      if (!order) {
+        return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      }
+
+      const responseOrder = {
+        id: order.orderId,
+        createdAt: order.createdAt,
+        confirmedAt: order.confirmedAt,
+        status: order.status,
+        customerName: resolveCustomerName(order),
+        customerPhone: resolveCustomerPhone(order),
+        fulfillmentType: order.fulfillmentType,
+        address: order.customerAddress,
+        scheduledFor: order.scheduledFor,
+        items: order.items,
+        total: order.totalAmount,
+        notes: [
+          order.specialInstructions?.trim(),
+          order.allergies?.trim() ? `Allergies: ${order.allergies.trim()}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      };
+
+      return NextResponse.json({
+        order: responseOrder,
+        message: `Order status updated to ${newStatus}`,
+      });
+    } catch (error: any) {
+      console.error(`[Admin] Error updating order ${orderId}:`, error);
       const response = toAdminErrorResponse(error);
       return NextResponse.json(
         { error: response.error },

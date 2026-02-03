@@ -1,3 +1,5 @@
+import { getMenuNamesForExtraction, getMenuItemByName } from "./chilli/menu";
+
 export type ExtractedOrder = {
   items: Array<{
     name: string;
@@ -6,6 +8,8 @@ export type ExtractedOrder = {
     glutenFree?: boolean;
     mozzarella?: boolean;
     notes?: string;
+    price?: number;
+    category?: string;
   }>;
   fulfillment?: "pickup" | "delivery";
   requestedTime?: string; // keep raw; you can normalize later
@@ -13,26 +17,11 @@ export type ExtractedOrder = {
   address?: string;
   rawText: string;
   confidence: number; // 0..1
+  estimatedTotal?: number;
 };
 
-// Canonical menu names (lowercase matching)
-const MENU_ITEMS = [
-  "margherita",
-  "vesuvio",
-  "calzone",
-  "capricciosa",
-  "hawaii",
-  "bussola",
-  "al tonno",
-  "opera",
-  "pompei",
-  "chicko banana",
-  "gudfadern",
-  "salami",
-  "bolognese",
-  "vegetarisk",
-  "funge",
-];
+// Get menu names from the comprehensive Chilli menu
+const MENU_ITEMS = getMenuNamesForExtraction();
 
 function norm(s: string) {
   return s
@@ -125,16 +114,30 @@ export function extractOrderFromTranscript(transcript: string): ExtractedOrder {
   const { glutenFree, mozzarella } = detectToggles(t);
 
   const items: ExtractedOrder["items"] = [];
+  let estimatedTotal = 0;
 
   for (const name of MENU_ITEMS) {
     if (containsWord(t, name)) {
       const qty = detectQtyNearby(t, name);
+      const menuItem = getMenuItemByName(name);
+
+      // Calculate price based on size
+      let price: number | undefined;
+      if (menuItem) {
+        price = size === "familj" && menuItem.priceFamilj
+          ? menuItem.priceFamilj
+          : menuItem.priceOrdinarie;
+        estimatedTotal += price * qty;
+      }
+
       items.push({
-        name,
+        name: menuItem?.name || name, // Use proper casing from menu
         qty,
         size,
         glutenFree: glutenFree || undefined,
         mozzarella: mozzarella || undefined,
+        price,
+        category: menuItem?.category,
       });
     }
   }
@@ -148,5 +151,6 @@ export function extractOrderFromTranscript(transcript: string): ExtractedOrder {
     requestedTime,
     rawText,
     confidence,
+    estimatedTotal: estimatedTotal > 0 ? estimatedTotal : undefined,
   };
 }

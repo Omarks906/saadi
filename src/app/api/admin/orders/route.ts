@@ -4,7 +4,14 @@ import { requireAdminOrg, toAdminErrorResponse } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 
-const ORDER_STATUSES = new Set(["confirmed", "cancelled", "completed"]);
+const ORDER_STATUSES = new Set([
+  "confirmed",
+  "preparing",
+  "ready",
+  "out_for_delivery",
+  "completed",
+  "cancelled",
+]);
 
 function normalizePhone(value?: string | null) {
   if (!value) return null;
