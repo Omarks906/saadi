@@ -24,6 +24,15 @@ export type Call = {
   rawEvent?: any;
 };
 
+// Order status types - expanded for kitchen workflow
+export type OrderStatus =
+  | "confirmed"    // Order received
+  | "preparing"    // Kitchen is preparing
+  | "ready"        // Ready for pickup/delivery
+  | "out_for_delivery" // On the way (delivery only)
+  | "completed"    // Delivered/picked up
+  | "cancelled";   // Order cancelled
+
 export type Order = {
   id: string;
   orderId: string;
@@ -32,7 +41,7 @@ export type Order = {
   organizationId: string;
   createdAt: string;
   confirmedAt: string;
-  status: "confirmed" | "cancelled" | "completed";
+  status: OrderStatus;
   businessType?: BusinessType | null;
   customerId?: string;
   fulfillmentType?: string;
@@ -639,6 +648,114 @@ export async function listOrdersByOrganization(
   } catch (error) {
     console.error("[VAPI Storage DB] Error listing orders by org:", error);
     return [];
+  }
+}
+
+/**
+ * Update order status by orderId and organizationId
+ * Returns the updated order or null if not found
+ */
+export async function updateOrderStatusByOrganization(
+  orderId: string,
+  organizationId: string,
+  newStatus: OrderStatus
+): Promise<Order | null> {
+  await ensureDbInitialized();
+  const pool = getPool();
+
+  try {
+    const result = await pool.query(
+      `UPDATE orders SET status = $1 WHERE order_id = $2 AND organization_id = $3 RETURNING *`,
+      [newStatus, orderId, organizationId]
+    );
+    if (result.rows.length === 0) {
+      return null;
+    }
+    console.log(`[VAPI Storage DB] Updated order ${orderId} status to ${newStatus}`);
+    return rowToOrder(result.rows[0]);
+  } catch (error) {
+    console.error("[VAPI Storage DB] Error updating order status:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get order statistics for an organization
+ */
+export async function getOrderStatsByOrganization(
+  organizationId: string,
+  since?: string
+): Promise<{
+  total: number;
+  byStatus: Record<OrderStatus, number>;
+  totalRevenue: number;
+  averageOrderValue: number;
+}> {
+  await ensureDbInitialized();
+  const pool = getPool();
+
+  const values: Array<string> = [organizationId];
+  let whereClause = "organization_id = $1";
+
+  if (since) {
+    values.push(since);
+    whereClause += ` AND created_at >= $${values.length}`;
+  }
+
+  try {
+    // Get counts by status
+    const statusResult = await pool.query(
+      `SELECT status, COUNT(*) as count FROM orders WHERE ${whereClause} GROUP BY status`,
+      values
+    );
+
+    const byStatus: Record<OrderStatus, number> = {
+      confirmed: 0,
+      preparing: 0,
+      ready: 0,
+      out_for_delivery: 0,
+      completed: 0,
+      cancelled: 0,
+    };
+
+    let total = 0;
+    for (const row of statusResult.rows) {
+      byStatus[row.status as OrderStatus] = parseInt(row.count, 10);
+      total += parseInt(row.count, 10);
+    }
+
+    // Get revenue stats (exclude cancelled orders)
+    const revenueResult = await pool.query(
+      `SELECT COALESCE(SUM(total_amount), 0) as revenue, COUNT(*) as count
+       FROM orders WHERE ${whereClause} AND status != 'cancelled' AND total_amount IS NOT NULL`,
+      values
+    );
+
+    const totalRevenue = parseFloat(revenueResult.rows[0]?.revenue || 0);
+    const orderCount = parseInt(revenueResult.rows[0]?.count || 0, 10);
+    const averageOrderValue = orderCount > 0 ? totalRevenue / orderCount : 0;
+
+    return {
+      total,
+      byStatus,
+      totalRevenue,
+      averageOrderValue,
+    };
+  } catch (error) {
+    console.error("[VAPI Storage DB] Error getting order stats:", error);
+    return {
+      total: 0,
+      byStatus: {
+        confirmed: 0,
+        preparing: 0,
+        ready: 0,
+        out_for_delivery: 0,
+        completed: 0,
+        cancelled: 0,
+      },
+      totalRevenue: 0,
+      averageOrderValue: 0,
+    };
   }
 }
 
