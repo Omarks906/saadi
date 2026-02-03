@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { AnalyticsNavButton } from "@/app/components/AnalyticsNavButton";
-import { Call } from "@/lib/vapi-storage";
+import { LanguageSelector } from "@/app/components/LanguageSelector";
+import { Call, getOrganizationSettings } from "@/lib/vapi-storage";
 import { getAdminTokenForOrg } from "@/lib/admin-token";
 import { getSessionOrgSlugFromCookies } from "@/lib/auth-session";
 import { isCurrentlyOpen, getTodaysHours, getEstimatedPrepTime } from "@/lib/chilli/config";
+import { t, Language } from "@/lib/translations/dashboard";
 
 export const dynamic = "force-dynamic";
 
@@ -164,6 +166,35 @@ async function getOrderStats(orgSlug?: string): Promise<OrderStats | null> {
   }
 }
 
+async function getOrgSettings(orgSlug?: string): Promise<{ language: Language }> {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  const adminToken = getAdminTokenForOrg(orgSlug || undefined);
+
+  if (!baseUrl || !adminToken || !orgSlug) {
+    return { language: "en" };
+  }
+
+  try {
+    const url = new URL(`${baseUrl}/api/admin/settings`);
+    url.searchParams.set("orgSlug", orgSlug);
+    const response = await fetch(url.toString(), {
+      headers: {
+        "x-admin-token": adminToken,
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return { language: "en" };
+    }
+
+    const data = await response.json();
+    return { language: data.settings?.language || "en" };
+  } catch {
+    return { language: "en" };
+  }
+}
+
 function isToday(iso?: string): boolean {
   if (!iso) return false;
   const d = new Date(iso);
@@ -221,6 +252,9 @@ export default async function DashboardPage({
     const recentCalls = calls.slice(0, 20);
     const recentOrders = orders.slice(0, 20);
     const stats = await getOrderStats(orgSlug || undefined);
+    const orgSettings = await getOrgSettings(orgSlug || undefined);
+    const lang = orgSettings.language;
+    const orgAdminToken = getAdminTokenForOrg(orgSlug || undefined) || "";
 
     // Restaurant status
     const isOpen = isCurrentlyOpen();
@@ -240,7 +274,14 @@ export default async function DashboardPage({
       <div className="container mx-auto px-4 py-8 space-y-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Chilli Dashboard</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold">{t(lang, "title")}</h1>
+              <LanguageSelector
+                currentLanguage={lang}
+                orgSlug={orgSlug || ""}
+                adminToken={orgAdminToken}
+              />
+            </div>
             <div className="flex items-center gap-3 mt-1">
               <div className="flex items-center gap-1.5">
                 <span
@@ -249,7 +290,7 @@ export default async function DashboardPage({
                   }`}
                 />
                 <span className="text-sm text-gray-600">
-                  {isOpen ? "Open" : "Closed"}
+                  {isOpen ? t(lang, "open") : t(lang, "closed")}
                 </span>
               </div>
               {todaysHours && !todaysHours.closed && (
@@ -259,7 +300,7 @@ export default async function DashboardPage({
               )}
               <span className="text-sm text-gray-400">|</span>
               <span className="text-sm text-gray-500">
-                Est. prep: {prepTime} min
+                {t(lang, "estPrep")}: {prepTime} {t(lang, "min")}
               </span>
             </div>
           </div>
@@ -269,27 +310,27 @@ export default async function DashboardPage({
               prefetch={false}
               className="px-4 py-2 bg-white border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
             >
-              View Menu
+              {t(lang, "viewMenu")}
             </Link>
             <Link
               href={ordersHref}
               prefetch={false}
               className="px-4 py-2 bg-white border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
             >
-              Kitchen Orders
+              {t(lang, "kitchenOrders")}
             </Link>
             <AnalyticsNavButton
               href={analyticsHref}
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
             >
-              View Analytics
+              {t(lang, "viewAnalytics")}
             </AnalyticsNavButton>
             <Link
               href="/logout"
               prefetch={false}
               className="px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
             >
-              Logout
+              {t(lang, "logout")}
             </Link>
           </div>
         </div>
@@ -297,7 +338,7 @@ export default async function DashboardPage({
         {hasConfigError && (
           <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <h2 className="text-lg font-semibold text-yellow-800 mb-2">
-              Configuration Error
+              {t(lang, "configError")}
             </h2>
             <ul className="list-disc list-inside text-sm text-yellow-700 space-y-1">
               {!baseUrl && (
@@ -320,7 +361,7 @@ export default async function DashboardPage({
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Calls Today
+              {t(lang, "callsToday")}
             </p>
             <p className="text-3xl font-bold text-gray-900 mt-2">
               {callsToday.length}
@@ -328,7 +369,7 @@ export default async function DashboardPage({
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Orders Today
+              {t(lang, "ordersToday")}
             </p>
             <p className="text-3xl font-bold text-gray-900 mt-2">
               {ordersToday.length}
@@ -336,7 +377,7 @@ export default async function DashboardPage({
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Active Orders
+              {t(lang, "activeOrders")}
             </p>
             <p className="text-3xl font-bold text-orange-600 mt-2">
               {activeOrders.length}
@@ -344,7 +385,7 @@ export default async function DashboardPage({
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Revenue Today
+              {t(lang, "revenueToday")}
             </p>
             <p className="text-3xl font-bold text-green-600 mt-2">
               {stats ? `${stats.totalRevenue.toFixed(0)} kr` : "—"}
@@ -352,7 +393,7 @@ export default async function DashboardPage({
           </div>
           <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Transfers
+              {t(lang, "transfers")}
             </p>
             <p className="text-3xl font-bold text-gray-900 mt-2">
               {transfersToday}
@@ -363,13 +404,13 @@ export default async function DashboardPage({
         {/* Order Status Breakdown */}
         {stats && stats.total > 0 && (
           <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Order Status Today</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">{t(lang, "orderStatusToday")}</h3>
             <div className="flex flex-wrap gap-4">
               {stats.byStatus.confirmed > 0 && (
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-blue-500" />
                   <span className="text-sm text-gray-600">
-                    {stats.byStatus.confirmed} Confirmed
+                    {stats.byStatus.confirmed} {t(lang, "confirmed")}
                   </span>
                 </div>
               )}
@@ -377,7 +418,7 @@ export default async function DashboardPage({
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-yellow-500" />
                   <span className="text-sm text-gray-600">
-                    {stats.byStatus.preparing} Preparing
+                    {stats.byStatus.preparing} {t(lang, "preparing")}
                   </span>
                 </div>
               )}
@@ -385,7 +426,7 @@ export default async function DashboardPage({
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-green-500" />
                   <span className="text-sm text-gray-600">
-                    {stats.byStatus.ready} Ready
+                    {stats.byStatus.ready} {t(lang, "ready")}
                   </span>
                 </div>
               )}
@@ -393,7 +434,7 @@ export default async function DashboardPage({
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-purple-500" />
                   <span className="text-sm text-gray-600">
-                    {stats.byStatus.out_for_delivery} Out for Delivery
+                    {stats.byStatus.out_for_delivery} {t(lang, "outForDelivery")}
                   </span>
                 </div>
               )}
@@ -401,7 +442,7 @@ export default async function DashboardPage({
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-gray-400" />
                   <span className="text-sm text-gray-600">
-                    {stats.byStatus.completed} Completed
+                    {stats.byStatus.completed} {t(lang, "completed")}
                   </span>
                 </div>
               )}
@@ -409,7 +450,7 @@ export default async function DashboardPage({
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded-full bg-red-500" />
                   <span className="text-sm text-gray-600">
-                    {stats.byStatus.cancelled} Cancelled
+                    {stats.byStatus.cancelled} {t(lang, "cancelled")}
                   </span>
                 </div>
               )}
@@ -420,7 +461,7 @@ export default async function DashboardPage({
         {failedPrintJobs > 0 && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
             <p className="text-sm font-semibold text-red-800">
-              Printing issues: {failedPrintJobs} failed jobs
+              {t(lang, "printingIssues")}: {failedPrintJobs} {t(lang, "failedJobs")}
             </p>
           </div>
         )}
@@ -428,16 +469,16 @@ export default async function DashboardPage({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Live Calls</h2>
+              <h2 className="text-lg font-semibold">{t(lang, "liveCalls")}</h2>
               <Link
                 href={orgSlug ? `/dashboard?orgSlug=${encodeURIComponent(orgSlug)}` : "/dashboard"}
                 className="text-sm text-blue-600 hover:text-blue-800"
               >
-                View all
+                {t(lang, "viewAll")}
               </Link>
             </div>
             {recentCalls.length === 0 ? (
-              <p className="text-sm text-gray-500">No calls yet.</p>
+              <p className="text-sm text-gray-500">{t(lang, "noCallsYet")}</p>
             ) : (
               <div className="space-y-3">
                 {recentCalls.map((call) => (
@@ -451,12 +492,12 @@ export default async function DashboardPage({
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-semibold text-gray-900">
-                          {call.phoneNumber || "Unknown caller"}
+                          {call.phoneNumber || t(lang, "unknownCaller")}
                         </p>
                         <p className="text-xs text-gray-500">
                           {call.createdAt
                             ? new Date(call.createdAt).toLocaleTimeString()
-                            : "Time unknown"}
+                            : t(lang, "timeUnknown")}
                         </p>
                       </div>
                       <span className="text-xs font-semibold uppercase text-gray-500">
@@ -471,17 +512,17 @@ export default async function DashboardPage({
 
           <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Live Orders</h2>
+              <h2 className="text-lg font-semibold">{t(lang, "liveOrders")}</h2>
               <Link
                 href={ordersHref}
                 prefetch={false}
                 className="text-sm text-blue-600 hover:text-blue-800"
               >
-                View kitchen
+                {t(lang, "viewKitchen")}
               </Link>
             </div>
             {recentOrders.length === 0 ? (
-              <p className="text-sm text-gray-500">No orders yet.</p>
+              <p className="text-sm text-gray-500">{t(lang, "noOrdersYet")}</p>
             ) : (
               <div className="space-y-3">
                 {recentOrders.map((order) => (
@@ -495,10 +536,10 @@ export default async function DashboardPage({
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-semibold text-gray-900">
-                          Order {order.id}
+                          {t(lang, "order")} {order.id}
                         </p>
                         <p className="text-xs text-gray-500">
-                          {order.items?.length ? `${order.items.length} items` : "Items pending"}
+                          {order.items?.length ? `${order.items.length} ${t(lang, "items")}` : t(lang, "itemsPending")}
                           {order.createdAt
                             ? ` · ${new Date(order.createdAt).toLocaleTimeString()}`
                             : ""}

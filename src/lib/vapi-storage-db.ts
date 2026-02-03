@@ -680,6 +680,67 @@ export async function updateOrderStatusByOrganization(
 }
 
 /**
+ * Organization settings type
+ */
+export type OrganizationSettings = {
+  language?: "en" | "sv";
+  [key: string]: any;
+};
+
+/**
+ * Get organization settings by organization ID
+ */
+export async function getOrganizationSettings(
+  organizationId: string
+): Promise<OrganizationSettings> {
+  await ensureDbInitialized();
+  const pool = getPool();
+
+  try {
+    const result = await pool.query(
+      "SELECT settings FROM organizations WHERE id = $1",
+      [organizationId]
+    );
+    if (result.rows.length === 0) {
+      return {};
+    }
+    return result.rows[0].settings || {};
+  } catch (error) {
+    console.error("[VAPI Storage DB] Error getting organization settings:", error);
+    return {};
+  }
+}
+
+/**
+ * Update organization settings by organization ID
+ */
+export async function updateOrganizationSettings(
+  organizationId: string,
+  settings: OrganizationSettings
+): Promise<OrganizationSettings> {
+  await ensureDbInitialized();
+  const pool = getPool();
+
+  try {
+    const result = await pool.query(
+      `UPDATE organizations
+       SET settings = settings || $2::jsonb, updated_at = NOW()
+       WHERE id = $1
+       RETURNING settings`,
+      [organizationId, JSON.stringify(settings)]
+    );
+    if (result.rows.length === 0) {
+      throw new Error(`Organization with id ${organizationId} not found`);
+    }
+    console.log(`[VAPI Storage DB] Updated settings for org ${organizationId}`);
+    return result.rows[0].settings;
+  } catch (error) {
+    console.error("[VAPI Storage DB] Error updating organization settings:", error);
+    throw error;
+  }
+}
+
+/**
  * Get order statistics for an organization
  */
 export async function getOrderStatsByOrganization(
