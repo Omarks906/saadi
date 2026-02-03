@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "migrate": "node scripts/migrate.js",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --import tsx --test 'src/**/*.test.ts'"
   },
   "dependencies": {
     "archiver": "^7.0.1",
@@ -30,6 +31,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }
