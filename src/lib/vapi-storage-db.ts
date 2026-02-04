@@ -33,6 +33,9 @@ export type OrderStatus =
   | "completed"    // Delivered/picked up
   | "cancelled";   // Order cancelled
 
+// Fulfillment type - how the order will be fulfilled
+export type FulfillmentType = "delivery" | "pickup";
+
 export type Order = {
   id: string;
   orderId: string;
@@ -44,7 +47,7 @@ export type Order = {
   status: OrderStatus;
   businessType?: BusinessType | null;
   customerId?: string;
-  fulfillmentType?: string;
+  fulfillmentType?: FulfillmentType;
   customerName?: string;
   customerPhone?: string;
   customerAddress?: string;
@@ -161,7 +164,7 @@ function rowToOrder(row: any): Order {
     status: row.status,
     businessType: row.business_type || null,
     customerId: row.customer_id || undefined,
-    fulfillmentType: row.fulfillment_type || undefined,
+    fulfillmentType: row.fulfillment_type?.toLowerCase() as FulfillmentType || undefined,
     customerName: row.customer_name || undefined,
     customerPhone: row.customer_phone || undefined,
     customerAddress: row.customer_address || undefined,
@@ -400,7 +403,7 @@ export async function createOrder(
     status: "confirmed",
     businessType: bt ?? "car",
     customerId: event.order?.customerId || event.customerId,
-    fulfillmentType: event.order?.fulfillmentType || event.fulfillmentType,
+    fulfillmentType: (event.order?.fulfillmentType || event.fulfillmentType)?.toLowerCase() as FulfillmentType || undefined,
     customerName:
       event.order?.customerName ||
       event.customerName ||
