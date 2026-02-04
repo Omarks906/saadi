@@ -9,6 +9,7 @@ import {
   createOrder,
   findOrderByOrderIdByOrganization,
   updateOrder,
+  type FulfillmentType,
 } from "@/lib/vapi-storage";
 import { getBusinessTypeFromAssistantId } from "@/lib/vapi-assistant-map";
 import { detectBusinessTypeFromCall, shouldSwitch } from "@/lib/business-type-detector";
@@ -878,7 +879,7 @@ async function upsertOrderFromStructuredOutput(params: {
     existingOrder.customerPhone =
       customerPhone || extractedPhone || existingOrder.customerPhone;
     existingOrder.fulfillmentType =
-      fulfillment || extractedFulfillment || existingOrder.fulfillmentType;
+      (fulfillment || extractedFulfillment || existingOrder.fulfillmentType)?.toLowerCase() as FulfillmentType || undefined;
     await updateOrder(existingOrder);
     console.log("[VAPI Webhook] end-of-call: Updated order from structured output", orderId);
     void runPrintPipeline(existingOrder, { organizationId }).catch((error) => {
@@ -899,7 +900,7 @@ async function upsertOrderFromStructuredOutput(params: {
   order.customerAddress = addressValue || order.customerAddress;
   order.customerName = customerName || order.customerName;
   order.customerPhone = customerPhone || order.customerPhone;
-  order.fulfillmentType = fulfillment || extractedFulfillment || order.fulfillmentType;
+  order.fulfillmentType = (fulfillment || extractedFulfillment || order.fulfillmentType)?.toLowerCase() as FulfillmentType || undefined;
   await updateOrder(order);
   console.log("[VAPI Webhook] end-of-call: Created order from structured output", order.id);
   void runPrintPipeline(order, { organizationId }).catch((error) => {
@@ -1230,7 +1231,7 @@ async function handleOrderConfirmed(
           description: buildItemNotes(item),
         }));
         if (extracted.fulfillment) {
-          existingOrder.fulfillmentType = extracted.fulfillment;
+          existingOrder.fulfillmentType = extracted.fulfillment as FulfillmentType;
         }
         existingOrder.metadata = {
           ...existingOrder.metadata,
@@ -1336,7 +1337,7 @@ async function handleOrderConfirmed(
           description: buildItemNotes(item),
         }));
         if (extracted.fulfillment) {
-          order.fulfillmentType = extracted.fulfillment;
+          order.fulfillmentType = extracted.fulfillment as FulfillmentType;
         }
         order.metadata = {
           ...order.metadata,
@@ -1552,7 +1553,7 @@ async function handleEndOfCall(
     ) ||
     extractedPhone;
   created.customerName = finalized.customerName || undefined;
-  created.fulfillmentType = finalized.fulfillment || extractedFulfillment || undefined;
+  created.fulfillmentType = (finalized.fulfillment || extractedFulfillment)?.toLowerCase() as FulfillmentType || undefined;
   created.customerAddress = finalized.deliveryAddress || extractedAddress || undefined;
   if (finalized.status === "CONFIRMED") {
     created.status = "confirmed";

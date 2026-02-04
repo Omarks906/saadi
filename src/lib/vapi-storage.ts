@@ -22,4 +22,5 @@ export {
   type Call,
   type Order,
   type OrderStatus,
+  type FulfillmentType,
 } from "./vapi-storage-db";
