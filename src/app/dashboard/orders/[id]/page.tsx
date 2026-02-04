@@ -60,7 +60,7 @@ type ChilliOrder = {
   customerName?: string | null;
   customerPhone?: string | null;
   fulfillmentType?: string | null;
-  address?: string | null;
+  customerAddress?: string | null;
   scheduledFor?: string | null;
   items?: Array<{
     name: string;
@@ -74,6 +74,20 @@ type ChilliOrder = {
   total?: number | null;
   notes?: string;
 };
+
+function formatTicketTime(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function getFulfillmentTypeLabel(order?: ChilliOrder | null) {
+  const value = order?.fulfillmentType?.toLowerCase() || "";
+  if (value.includes("deliver")) return "DELIVERY";
+  if (value.includes("pickup")) return "PICKUP";
+  return order?.fulfillmentType ? order.fulfillmentType.toUpperCase() : "—";
+}
 
 async function getOrder(orderId: string, orgSlug: string): Promise<ChilliOrder | null> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
@@ -235,6 +249,14 @@ export default async function OrderDetailPage({
       </div>
 
       <div className="bg-white border-2 border-dashed border-gray-200 rounded-lg p-6 shadow-sm">
+        <div className="text-xs font-semibold uppercase text-gray-400">
+          NEW ORDER — PHONE
+        </div>
+        <div className="mt-2 space-y-1 text-sm text-gray-700">
+          <p>Time: {formatTicketTime(order?.confirmedAt || order?.createdAt)}</p>
+          <p>Type: {getFulfillmentTypeLabel(order)}</p>
+        </div>
+
         <div className="flex items-start justify-between">
           <div>
             <p className="text-2xl font-bold text-gray-900">Order {orderId}</p>
@@ -264,7 +286,7 @@ export default async function OrderDetailPage({
                 : "ASAP"}
             </p>
             {getFulfillmentLabel(order) === "Delivery" && (
-              <p className="text-sm text-gray-700">{order?.address || "—"}</p>
+              <p className="text-sm text-gray-700">{order?.customerAddress || "—"}</p>
             )}
           </div>
         </div>
