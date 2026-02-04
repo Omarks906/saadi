@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS calls (
 CREATE TABLE IF NOT EXISTS orders (
   id VARCHAR(255) PRIMARY KEY,
   order_id VARCHAR(255) NOT NULL,
+  order_number INTEGER NOT NULL,
   call_id VARCHAR(255),
   tenant_id VARCHAR(255) NOT NULL DEFAULT 'default',
   organization_id UUID NOT NULL,

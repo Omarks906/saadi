@@ -140,7 +140,7 @@ function buildTicketOrder(order: Order): TicketOrder {
   return {
     restaurantName: metadata.restaurantName || eventRestaurant?.name || metadata.businessName,
     restaurantPhone: metadata.restaurantPhone || eventRestaurant?.phone || metadata.phone,
-    orderNumber: order.orderId,
+    orderNumber: String(order.orderNumber),
     confirmedAt: order.confirmedAt,
     fulfillment:
       metadata.fulfillment ||

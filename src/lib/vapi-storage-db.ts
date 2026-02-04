@@ -36,6 +36,7 @@ export type OrderStatus =
 export type Order = {
   id: string;
   orderId: string;
+  orderNumber: number;
   callId?: string;
   tenantId: string;
   organizationId: string;
@@ -153,6 +154,7 @@ function rowToOrder(row: any): Order {
   return {
     id: row.id,
     orderId: row.order_id,
+    orderNumber: row.order_number,
     callId: row.call_id || undefined,
     tenantId: row.tenant_id,
     organizationId: row.organization_id,
@@ -183,6 +185,7 @@ function orderToRow(order: Order): any {
   return {
     id: order.id,
     order_id: order.orderId,
+    order_number: order.orderNumber,
     call_id: order.callId || null,
     tenant_id: order.tenantId,
     organization_id: order.organizationId,
@@ -371,6 +374,19 @@ export async function findCallByCallIdByOrganization(
 }
 
 /**
+ * Get the next order number for an organization
+ */
+async function getNextOrderNumber(organizationId: string): Promise<number> {
+  const pool = getPool();
+  const result = await pool.query(
+    `SELECT COALESCE(MAX(order_number), 0) + 1 as next_number
+     FROM orders WHERE organization_id = $1`,
+    [organizationId]
+  );
+  return parseInt(result.rows[0].next_number, 10);
+}
+
+/**
  * Create a new Order record from webhook event
  */
 export async function createOrder(
@@ -381,17 +397,21 @@ export async function createOrder(
   const pool = getPool();
   const organizationId = options?.organizationId || getTenantId();
   const tenantId = organizationId;
-  
+
   const id = crypto.randomBytes(8).toString("hex");
   const callId = event.order?.callId || event.callId;
   const assistantId = extractAssistantId(event);
   if (!assistantId) console.warn("[VAPI] assistantId missing");
   const bt = getBusinessTypeFromAssistantId(assistantId);
   if (assistantId && !bt) console.warn("[VAPI] assistantId not in map:", assistantId);
-  
+
+  // Get next sequential order number for this organization
+  const orderNumber = await getNextOrderNumber(organizationId);
+
   const order: Order = {
     id,
     orderId: event.order?.id || event.id || crypto.randomBytes(8).toString("hex"),
+    orderNumber,
     callId,
     tenantId,
     organizationId,
@@ -437,18 +457,18 @@ export async function createOrder(
     metadata: event.order?.metadata || event.metadata,
     rawEvent: event,
   };
-  
+
   const row = orderToRow(order);
   await pool.query(
     `INSERT INTO orders (
-      id, order_id, call_id, tenant_id, organization_id,
+      id, order_id, order_number, call_id, tenant_id, organization_id,
       created_at, confirmed_at, status,
       business_type, customer_id, customer_name, customer_phone, customer_address,
       scheduled_for, special_instructions, allergies,
       items, total_amount, currency, metadata, raw_event
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
     [
-      row.id, row.order_id, row.call_id, row.tenant_id, row.organization_id,
+      row.id, row.order_id, row.order_number, row.call_id, row.tenant_id, row.organization_id,
       row.created_at, row.confirmed_at, row.status,
       row.business_type, row.customer_id,
       row.customer_name, row.customer_phone, row.customer_address,
@@ -459,7 +479,7 @@ export async function createOrder(
       row.raw_event ? JSON.stringify(row.raw_event) : null,
     ]
   );
-  
+
   return order;
 }
 
@@ -494,14 +514,14 @@ export async function updateOrder(order: Order): Promise<void> {
   const row = orderToRow(order);
   await pool.query(
     `UPDATE orders SET
-      order_id = $2, call_id = $3, confirmed_at = $4, status = $5,
-      business_type = $6, customer_id = $7, customer_name = $8, customer_phone = $9,
-      customer_address = $10, scheduled_for = $11, special_instructions = $12,
-      allergies = $13, items = $14, total_amount = $15, currency = $16,
-      metadata = $17, raw_event = $18
-    WHERE id = $1 AND organization_id = $19`,
+      order_id = $2, order_number = $3, call_id = $4, confirmed_at = $5, status = $6,
+      business_type = $7, customer_id = $8, customer_name = $9, customer_phone = $10,
+      customer_address = $11, scheduled_for = $12, special_instructions = $13,
+      allergies = $14, items = $15, total_amount = $16, currency = $17,
+      metadata = $18, raw_event = $19
+    WHERE id = $1 AND organization_id = $20`,
     [
-      row.id, row.order_id, row.call_id, row.confirmed_at, row.status,
+      row.id, row.order_id, row.order_number, row.call_id, row.confirmed_at, row.status,
       row.business_type, row.customer_id,
       row.customer_name, row.customer_phone,
       row.customer_address, row.scheduled_for, row.special_instructions,
