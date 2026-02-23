@@ -189,6 +189,21 @@ function isTransfer(call: Call): boolean {
   );
 }
 
+
+function formatTenantLabel(orgSlug: string | null): string {
+  if (!orgSlug) return "Solutionops";
+
+  if (orgSlug.toLowerCase() === "demo") {
+    return "Solutionops";
+  }
+
+  return orgSlug
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -210,6 +225,7 @@ export default async function DashboardPage({
   const ordersHref = orgSlug
     ? `/dashboard/orders?orgSlug=${encodeURIComponent(orgSlug)}`
     : "/dashboard/orders";
+  const tenantLabel = formatTenantLabel(orgSlug);
 
   // Show configuration errors if env vars are missing
   const hasConfigError = !baseUrl || !adminToken;
@@ -527,22 +543,27 @@ export default async function DashboardPage({
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-6">
+      <div className="mb-6 flex items-start justify-between gap-4">
         <h1 className="text-3xl font-bold">Calls Dashboard</h1>
-        <div className="flex items-center gap-3">
-          <AnalyticsNavButton
-            href={analyticsHref}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-          >
-            View Analytics
-          </AnalyticsNavButton>
-          <Link
-            href="/logout"
-            prefetch={false}
-            className="px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
-          >
-            Logout
-          </Link>
+        <div className="flex flex-col items-end gap-2">
+          <span className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">
+            {tenantLabel}
+          </span>
+          <div className="flex items-center gap-3">
+            <AnalyticsNavButton
+              href={analyticsHref}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+            >
+              View Analytics
+            </AnalyticsNavButton>
+            <Link
+              href="/logout"
+              prefetch={false}
+              className="px-3 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Logout
+            </Link>
+          </div>
         </div>
       </div>
       
@@ -687,4 +708,3 @@ export default async function DashboardPage({
     </div>
   );
 }
-
