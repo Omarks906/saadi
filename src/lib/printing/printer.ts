@@ -1,5 +1,5 @@
 export type PrintResult =
-  | { ok: true; jobId?: string }
+  | { ok: true; jobId?: string; deferred?: boolean }
   | { ok: false; error: string };
 
 export interface PrinterProvider {

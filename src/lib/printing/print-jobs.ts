@@ -9,6 +9,7 @@ export type PrintJobListItem = {
   attempts: number;
   lastError?: string | null;
   printerTarget?: string | null;
+  content?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -38,6 +39,7 @@ class PgPrintJobQueryStore implements PrintJobQueryStore {
       attempts: Number(row.attempts) || 0,
       lastError: row.last_error || null,
       printerTarget: row.printer_target || null,
+      content: row.content || "",
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));
@@ -66,6 +68,7 @@ class PgPrintJobAdminStore implements PrintJobAdminStore {
       attempts: Number(result.rows[0].attempts) || 0,
       lastError: result.rows[0].last_error || null,
       printerTarget: result.rows[0].printer_target || null,
+      content: result.rows[0].content || "",
       createdAt: result.rows[0].created_at,
       updatedAt: result.rows[0].updated_at,
     };
@@ -90,6 +93,7 @@ class PgPrintJobAdminStore implements PrintJobAdminStore {
       attempts: Number(result.rows[0].attempts) || 0,
       lastError: result.rows[0].last_error || null,
       printerTarget: result.rows[0].printer_target || null,
+      content: result.rows[0].content || "",
       createdAt: result.rows[0].created_at,
       updatedAt: result.rows[0].updated_at,
     };
