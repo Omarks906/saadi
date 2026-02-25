@@ -70,18 +70,18 @@ async function apiGetNext() {
   }
 
   const payload = await response.json();
-  if (!payload?.ok || !payload?.job?.id) return null;
-  return payload.job;
+  if (!payload?.printJobId) return null;
+  return payload;
 }
 
-async function apiUpdate(jobId, status, error, providerJobId) {
+async function apiUpdate(jobId, status, error) {
   const response = await fetch(`${APP_BASE_URL.replace(/\/$/, "")}/api/print/update`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${PRINT_AGENT_TOKEN}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ jobId, status, error, providerJobId }),
+    body: JSON.stringify({ printJobId: jobId, status, error }),
   });
 
   if (!response.ok) {
@@ -115,27 +115,27 @@ async function processOne() {
     const job = await apiGetNext();
     if (!job) return;
 
-    const jobId = String(job.id);
+    const jobId = String(job.printJobId);
     const orderId = String(job.orderId || "unknown");
-    const ticketText = String(job.ticketText || "");
+    const ticketText = String(job.content || "");
 
     if (!ticketText.trim()) {
       log("ERROR", `Job ${jobId} has empty ticket text; marking failed`);
-      await apiUpdate(jobId, "failed", "empty_ticket_text", null);
+      await apiUpdate(jobId, "failed", "empty_ticket_text");
       return;
     }
 
     if (printedJobs.has(jobId)) {
       log("WARN", `Job ${jobId} already printed locally; sending idempotent sent update`);
-      await apiUpdate(jobId, "sent", null, `duplicate-skip:${jobId}`);
+      await apiUpdate(jobId, "sent", null);
       return;
     }
 
     log("INFO", `Printing job=${jobId} order=${orderId}`);
-    const providerJobId = await printTicketText(ticketText, jobId);
+    await printTicketText(ticketText, jobId);
     printedJobs.add(jobId);
     persistState();
-    await apiUpdate(jobId, "sent", null, providerJobId);
+    await apiUpdate(jobId, "sent", null);
     log("INFO", `Printed successfully job=${jobId}`);
   } catch (error) {
     log("ERROR", "Processing cycle failed", String(error?.message || error));

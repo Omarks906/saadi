@@ -1,11 +1,6 @@
 import { NextRequest } from "next/server";
 import { getPool, initDatabase } from "@/lib/db/connection";
 
-export type AgentOrgContext = {
-  id: string;
-  slug: string;
-};
-
 export class AgentAuthError extends Error {
   status: number;
 
@@ -15,50 +10,28 @@ export class AgentAuthError extends Error {
   }
 }
 
-export async function requirePrintAgentOrg(req: NextRequest): Promise<AgentOrgContext> {
+export async function requirePrintAgentOrgId(req: NextRequest): Promise<string> {
   const configuredToken = process.env.PRINT_AGENT_TOKEN;
-  if (!configuredToken) {
-    throw new AgentAuthError("Server configuration error", 500);
-  }
-
   const authHeader = req.headers.get("authorization") || "";
-  const expected = `Bearer ${configuredToken}`;
-  if (authHeader !== expected) {
+
+  if (!configuredToken || authHeader !== `Bearer ${configuredToken}`) {
     throw new AgentAuthError("Unauthorized", 401);
   }
 
+  const pilotSlug = (process.env.PILOT_ORG_SLUG || "chilli").trim().toLowerCase();
+
   await initDatabase();
   const pool = getPool();
-
-  const orgId = process.env.PRINT_AGENT_ORG_ID?.trim();
-  const orgSlug = process.env.PRINT_AGENT_ORG_SLUG?.trim().toLowerCase();
-
-  if (orgId) {
-    const result = await pool.query(
-      "SELECT id, slug FROM organizations WHERE id = $1 LIMIT 1",
-      [orgId]
-    );
-    if (result.rows.length === 0) {
-      throw new AgentAuthError("Configured PRINT_AGENT_ORG_ID not found", 500);
-    }
-    return { id: result.rows[0].id, slug: result.rows[0].slug };
-  }
-
-  if (orgSlug) {
-    const result = await pool.query(
-      "SELECT id, slug FROM organizations WHERE slug = $1 LIMIT 1",
-      [orgSlug]
-    );
-    if (result.rows.length === 0) {
-      throw new AgentAuthError("Configured PRINT_AGENT_ORG_SLUG not found", 500);
-    }
-    return { id: result.rows[0].id, slug: result.rows[0].slug };
-  }
-
-  throw new AgentAuthError(
-    "Server configuration error: set PRINT_AGENT_ORG_ID or PRINT_AGENT_ORG_SLUG",
-    500
+  const result = await pool.query(
+    "SELECT id FROM organizations WHERE slug = $1 LIMIT 1",
+    [pilotSlug]
   );
+
+  if (result.rows.length === 0) {
+    throw new AgentAuthError(`Pilot org not found for slug ${pilotSlug}`, 500);
+  }
+
+  return result.rows[0].id;
 }
 
 export function toAgentErrorResponse(error: unknown): { status: number; error: string } {

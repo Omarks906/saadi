@@ -11,7 +11,7 @@ Set these in Railway service variables:
 
 - `PRINT_PROVIDER=windows_agent`
 - `PRINT_AGENT_TOKEN=<strong-random-token>`
-- `PRINT_AGENT_ORG_SLUG=chilli` (or set `PRINT_AGENT_ORG_ID=<uuid>`)
+- `PILOT_ORG_SLUG=chilli`
 - Keep `PRINT_TEST_MODE` unset (or not `1`)
 
 ## 2) Windows prerequisites

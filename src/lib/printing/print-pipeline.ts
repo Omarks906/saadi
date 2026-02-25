@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import crypto from "crypto";
 import { getPool } from "@/lib/db/connection";
 import { getTenantId } from "@/lib/tenant";
@@ -6,7 +7,7 @@ import { getPrinterProvider } from "./provider-factory";
 import { PrinterProvider } from "./printer";
 import type { Order } from "@/lib/vapi-storage";
 
-export type PrintJobStatus = "queued" | "sent" | "failed" | "retrying";
+export type PrintJobStatus = "queued" | "printing" | "sent" | "failed" | "retrying";
 
 export type PrintJobRecord = {
   id: string;
@@ -17,6 +18,7 @@ export type PrintJobRecord = {
   attempts: number;
   lastError?: string | null;
   printerTarget?: string | null;
+  content?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -54,9 +56,8 @@ class PgPrintJobStore implements PrintJobStore {
     const id = crypto.randomUUID();
     const result = await pool.query(
       `INSERT INTO print_jobs (
-        id, organization_id, order_id, call_id, status, attempts, last_error, printer_target
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      ON CONFLICT (organization_id, order_id) DO NOTHING
+        id, organization_id, order_id, call_id, status, attempts, last_error, printer_target, content
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *`,
       [
         id,
@@ -67,6 +68,7 @@ class PgPrintJobStore implements PrintJobStore {
         job.attempts,
         job.lastError || null,
         job.printerTarget || null,
+        job.content || "",
       ]
     );
     if (result.rows.length === 0) return null;
@@ -123,6 +125,7 @@ function rowToPrintJob(row: any): PrintJobRecord {
     attempts: Number(row.attempts) || 0,
     lastError: row.last_error || null,
     printerTarget: row.printer_target || null,
+    content: row.content || "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -218,6 +221,8 @@ export async function runPrintPipeline(
     }
   }
 
+  const ticket = renderTicket(buildTicketOrder(order));
+
   let job: PrintJobRecord | null = null;
   if (!existing) {
     job = await store.insert({
@@ -228,6 +233,7 @@ export async function runPrintPipeline(
       attempts: 0,
       lastError: null,
       printerTarget: resolvePrinterTarget(order) || null,
+      content: ticket,
     });
   } else if (existing?.status === "failed") {
     job = await store.markRetry(organizationId, orderId);
@@ -240,7 +246,6 @@ export async function runPrintPipeline(
     }
   }
 
-  const ticket = renderTicket(buildTicketOrder(order));
   if (process.env.PRINT_TEST_MODE === "1") {
     console.log(
       JSON.stringify({
