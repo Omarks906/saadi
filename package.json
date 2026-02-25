@@ -8,7 +8,8 @@
     "start": "next start",
     "migrate": "node scripts/migrate.js",
     "lint": "eslint",
-    "check:tenant-printers": "node scripts/check-tenant-printers.js"
+    "check:tenant-printers": "node scripts/check-tenant-printers.js",
+    "print-agent:windows": "node scripts/windows-print-agent.js"
   },
   "dependencies": {
     "archiver": "^7.0.1",

@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS print_jobs (
   attempts INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
   printer_target TEXT,
+  provider_job_id TEXT,
   created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
   CONSTRAINT print_jobs_org_order_unique UNIQUE (organization_id, order_id)

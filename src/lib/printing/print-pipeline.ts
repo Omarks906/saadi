@@ -264,6 +264,9 @@ export async function runPrintPipeline(
   });
 
   if (result.ok) {
+    if (result.deferred) {
+      return { ok: true, skipped: true, jobId: job?.id || existing?.id || result.jobId };
+    }
     await store.markSent(organizationId, orderId);
     return { ok: true, jobId: result.jobId };
   }
