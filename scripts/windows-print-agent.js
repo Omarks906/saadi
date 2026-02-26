@@ -132,7 +132,24 @@ async function processOne() {
     }
 
     log("INFO", `Printing job=${jobId} order=${orderId}`);
-    await printTicketText(ticketText, jobId);
+    let printError = null;
+    try {
+      await printTicketText(ticketText, jobId);
+    } catch (printErr) {
+      printError = printErr;
+    }
+
+    if (printError) {
+      const msg = String(printError?.message || printError);
+      log("ERROR", `Print failed job=${jobId}`, msg);
+      try {
+        await apiUpdate(jobId, "failed", msg);
+      } catch (updateErr) {
+        log("ERROR", `Failed to report failure for job=${jobId}`, String(updateErr?.message || updateErr));
+      }
+      return;
+    }
+
     printedJobs.add(jobId);
     persistState();
     await apiUpdate(jobId, "sent", null);
