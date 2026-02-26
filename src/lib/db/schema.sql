@@ -89,6 +89,11 @@ CREATE TABLE IF NOT EXISTS print_jobs (
 
 ALTER TABLE print_jobs DROP CONSTRAINT IF EXISTS print_jobs_org_order_unique;
 
+-- Fix status check constraint to include 'printing' (original migration omitted it)
+ALTER TABLE print_jobs DROP CONSTRAINT IF EXISTS print_jobs_status_check;
+ALTER TABLE print_jobs ADD CONSTRAINT print_jobs_status_check
+  CHECK (status IN ('queued','printing','sent','failed','retrying'));
+
 -- Ensure content column exists on print_jobs (added after initial deployment)
 ALTER TABLE print_jobs ADD COLUMN IF NOT EXISTS content TEXT NOT NULL DEFAULT '';
 
