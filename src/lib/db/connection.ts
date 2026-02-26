@@ -55,7 +55,10 @@ export function getPool(): Pool {
     });
 
     if (!initPromise) {
-      initPromise = initDatabaseWithPool(pool).catch((error) => {
+      initPromise = initDatabaseWithPool(pool);
+      // Attach a catch just to prevent unhandled-rejection warnings;
+      // the promise stays rejected so callers of initDatabase() see the error.
+      initPromise.catch((error) => {
         console.error("[DB] Initialization failed:", error);
       });
     }

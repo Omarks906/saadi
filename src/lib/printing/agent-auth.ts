@@ -11,7 +11,7 @@ export class AgentAuthError extends Error {
 }
 
 export async function requirePrintAgentOrgId(req: NextRequest): Promise<string> {
-  const configuredToken = process.env.PRINT_AGENT_TOKEN;
+  const configuredToken = process.env.PRINT_AGENT_TOKEN?.trim();
   const authHeader = req.headers.get("authorization") || "";
 
   if (!configuredToken || authHeader !== `Bearer ${configuredToken}`) {
@@ -38,5 +38,6 @@ export function toAgentErrorResponse(error: unknown): { status: number; error: s
   if (error instanceof AgentAuthError) {
     return { status: error.status, error: error.message };
   }
+  console.error("[PrintAgent] Unhandled route error:", error);
   return { status: 500, error: "Internal server error" };
 }
