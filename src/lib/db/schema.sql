@@ -92,6 +92,9 @@ ALTER TABLE print_jobs DROP CONSTRAINT IF EXISTS print_jobs_org_order_unique;
 -- Ensure content column exists on print_jobs (added after initial deployment)
 ALTER TABLE print_jobs ADD COLUMN IF NOT EXISTS content TEXT NOT NULL DEFAULT '';
 
+-- Ensure claimed_at column exists on print_jobs (added after initial deployment)
+ALTER TABLE print_jobs ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMP WITH TIME ZONE;
+
 -- Ensure tenant_id exists on existing tables
 ALTER TABLE calls ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(255);
