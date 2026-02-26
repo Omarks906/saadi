@@ -15,6 +15,11 @@ export async function requirePrintAgentOrgId(req: NextRequest): Promise<string> 
   const authHeader = req.headers.get("authorization") || "";
 
   if (!configuredToken || authHeader !== `Bearer ${configuredToken}`) {
+    console.error(
+      `[PrintAgent] Auth failed — configuredToken set: ${!!configuredToken}, ` +
+      `received header: "${authHeader}", ` +
+      `expected: "Bearer ${configuredToken?.slice(0, 4)}..."`
+    );
     throw new AgentAuthError("Unauthorized", 401);
   }
 
