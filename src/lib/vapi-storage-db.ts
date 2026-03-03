@@ -583,15 +583,30 @@ export async function listCalls(): Promise<Call[]> {
   }
 }
 
-export async function listCallsByOrganization(organizationId: string): Promise<Call[]> {
+export async function listCallsByOrganization(
+  organizationId: string,
+  options?: { since?: string; limit?: number }
+): Promise<Call[]> {
   await ensureDbInitialized();
   const pool = getPool();
 
+  const values: Array<string | number> = [organizationId];
+  let sql = "SELECT * FROM calls WHERE organization_id = $1";
+
+  if (options?.since) {
+    values.push(options.since);
+    sql += ` AND created_at >= $${values.length}`;
+  }
+
+  sql += " ORDER BY created_at DESC";
+
+  if (options?.limit) {
+    values.push(options.limit);
+    sql += ` LIMIT $${values.length}`;
+  }
+
   try {
-    const result = await pool.query(
-      "SELECT * FROM calls WHERE organization_id = $1 ORDER BY created_at DESC",
-      [organizationId]
-    );
+    const result = await pool.query(sql, values);
     return result.rows.map(rowToCall);
   } catch (error) {
     console.error("[VAPI Storage DB] Error listing calls:", error);

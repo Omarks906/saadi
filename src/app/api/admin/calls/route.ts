@@ -7,13 +7,15 @@ export const runtime = "nodejs";
 /**
  * GET /api/admin/calls
  * Admin endpoint to list calls with filtering and pagination
- * 
+ *
  * Query params:
  * - businessType: Filter by business type (optional)
- * - limit: Maximum number of results (default: 50)
- * 
+ * - limit: Maximum number of results (default: 50, max: 1000)
+ * - since: ISO timestamp – only return calls with created_at >= this value (optional)
+ * - orgSlug: Organization slug (required when using global ADMIN_TOKEN)
+ *
  * Headers:
- * - x-admin-token: Must match ADMIN_TOKEN environment variable
+ * - x-admin-token: Must match ADMIN_TOKEN or ADMIN_TOKEN_BY_ORG for the org
  */
 export async function GET(req: NextRequest) {
   try {
@@ -22,12 +24,13 @@ export async function GET(req: NextRequest) {
     const businessTypeFilter = searchParams.get("businessType");
     const limitParam = searchParams.get("limit");
     const limit = limitParam ? Math.min(parseInt(limitParam, 10) || 50, 1000) : 50; // Max 1000
+    const since = searchParams.get("since") || undefined; // ISO timestamp – pushed to DB
 
-    // Get all calls from database
+    // Get org-scoped calls (date and limit filters applied in the DB query)
     let calls: Call[];
     try {
       const org = await requireAdminOrg(req);
-      calls = await listCallsByOrganization(org.id);
+      calls = await listCallsByOrganization(org.id, { since, limit });
       console.log(`[Admin] Found ${calls.length} calls in database`);
     } catch (error: any) {
       const response = toAdminErrorResponse(error);
@@ -45,15 +48,13 @@ export async function GET(req: NextRequest) {
       calls = calls.filter(call => call.businessType === businessTypeFilter);
     }
 
-    // Apply limit (calls are already sorted by createdAt DESC from listCalls)
-    const limitedCalls = calls.slice(0, limit);
-
     return NextResponse.json({
-      calls: limitedCalls,
+      calls,
       total: calls.length,
-      returned: limitedCalls.length,
+      returned: calls.length,
       filters: {
         businessType: businessTypeFilter || null,
+        since: since || null,
         limit,
       },
     });

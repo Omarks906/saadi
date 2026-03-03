@@ -11,6 +11,7 @@ const execFileAsync = promisify(execFile);
 
 const APP_BASE_URL = process.env.APP_BASE_URL;
 const PRINT_AGENT_TOKEN = process.env.PRINT_AGENT_TOKEN;
+const PRINTER_NAME = process.env.PRINTER_NAME || "";
 const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || 2000);
 const STATE_FILE_PATH = process.env.AGENT_STATE_FILE || path.join(process.cwd(), ".print-agent-state.json");
 const TEMP_DIR = process.env.AGENT_TEMP_DIR || path.join(os.tmpdir(), "saadi-print-agent");
@@ -95,9 +96,13 @@ async function printTicketText(ticketText, jobId) {
   const filePath = path.join(TEMP_DIR, `${jobId}.txt`);
   fs.writeFileSync(filePath, `${ticketText}\n`, "utf8");
 
+  const escapedPath = filePath.replace(/\\/g, "\\\\");
+  const printerArg = PRINTER_NAME
+    ? ` -Name "${PRINTER_NAME.replace(/"/g, '\\"')}"`
+    : "";
   const script = `
 $ErrorActionPreference = "Stop"
-Get-Content -Raw -Path "${filePath.replace(/\\/g, "\\\\")}" | Out-Printer
+Get-Content -Raw -Path "${escapedPath}" | Out-Printer${printerArg}
 `;
 
   await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
@@ -105,7 +110,7 @@ Get-Content -Raw -Path "${filePath.replace(/\\/g, "\\\\")}" | Out-Printer
     maxBuffer: 1024 * 1024,
   });
 
-  return `win-default:${jobId}`;
+  return `win-${PRINTER_NAME || "default"}:${jobId}`;
 }
 
 async function processOne() {
@@ -164,7 +169,7 @@ async function processOne() {
 async function runLoop() {
   ensureRequiredEnv();
   loadState();
-  log("INFO", `Starting print agent. polling=${POLL_INTERVAL_MS}ms state=${STATE_FILE_PATH}`);
+  log("INFO", `Starting print agent. polling=${POLL_INTERVAL_MS}ms state=${STATE_FILE_PATH} printer=${PRINTER_NAME || "(windows default)"}`);
 
   while (!stopping) {
     await processOne();

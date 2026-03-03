@@ -7,7 +7,39 @@ import { isCurrentlyOpen, getTodaysHours, getEstimatedPrepTime } from "@/lib/chi
 
 export const dynamic = "force-dynamic";
 
-async function getCalls(orgSlug?: string): Promise<Call[]> {
+/**
+ * Returns the start of today (midnight) in the Europe/Stockholm timezone as a
+ * UTC Date. Using the local Stockholm day boundary ensures the "Calls Today"
+ * metric is correct regardless of where the server is hosted (UTC, etc.).
+ */
+function getStockholmDayStart(): Date {
+  const TZ = "Europe/Stockholm";
+  const now = new Date();
+  // Get the Stockholm wall-clock time components for "now"
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(now);
+  const p: Record<string, string> = {};
+  for (const part of parts) p[part.type] = part.value;
+  // Milliseconds elapsed since Stockholm midnight
+  const msIntoDay =
+    (parseInt(p.hour) * 3600 + parseInt(p.minute) * 60 + parseInt(p.second)) *
+    1000;
+  return new Date(now.getTime() - msIntoDay);
+}
+
+async function getCalls(
+  orgSlug?: string,
+  options?: { since?: string; limit?: number }
+): Promise<Call[]> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const adminToken = getAdminTokenForOrg(orgSlug || undefined);
 
@@ -23,9 +55,12 @@ async function getCalls(orgSlug?: string): Promise<Call[]> {
 
   try {
     const url = new URL(`${baseUrl}/api/admin/calls`);
-    url.searchParams.set("limit", "50");
+    url.searchParams.set("limit", String(options?.limit ?? 50));
     if (orgSlug) {
       url.searchParams.set("orgSlug", orgSlug);
+    }
+    if (options?.since) {
+      url.searchParams.set("since", options.since);
     }
     const response = await fetch(url.toString(), {
       headers: {
@@ -164,16 +199,6 @@ async function getOrderStats(orgSlug?: string): Promise<OrderStats | null> {
   }
 }
 
-function isToday(iso?: string): boolean {
-  if (!iso) return false;
-  const d = new Date(iso);
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 1);
-  return d >= start && d < end;
-}
-
 function isTransfer(call: Call): boolean {
   const meta = call.metadata || {};
   const raw = call.rawEvent || {};
@@ -216,7 +241,14 @@ export default async function DashboardPage({
   const isChilli = orgSlug === "chilli";
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const adminToken = process.env.ADMIN_TOKEN;
-  const calls = await getCalls(orgSlug || undefined);
+  // For chilli we fetch today's calls (scoped to Stockholm midnight) so the
+  // "Calls Today" count is exact regardless of server timezone or call volume.
+  // For other orgs we fetch the 50 most recent calls for the table.
+  const todaySince = isChilli ? getStockholmDayStart().toISOString() : undefined;
+  const calls = await getCalls(
+    orgSlug || undefined,
+    isChilli ? { since: todaySince, limit: 1000 } : { limit: 50 }
+  );
   const orders = isChilli ? await getOrders(orgSlug || undefined) : [];
   const failedPrintJobs = await getFailedPrintJobsCount(orgSlug || undefined);
   const analyticsHref = orgSlug
@@ -231,8 +263,12 @@ export default async function DashboardPage({
   const hasConfigError = !baseUrl || !adminToken;
 
   if (isChilli) {
-    const callsToday = calls.filter((call) => isToday(call.createdAt));
-    const ordersToday = orders.filter((order) => isToday(order.createdAt));
+    // All calls here are from today (filtered by Stockholm midnight in the API).
+    const callsToday = calls;
+    const ordersToday = orders.filter((order) => {
+      if (!order.createdAt) return false;
+      return new Date(order.createdAt) >= getStockholmDayStart();
+    });
     const transfersToday = callsToday.filter(isTransfer).length;
     const recentCalls = calls.slice(0, 20);
     const recentOrders = orders.slice(0, 20);
