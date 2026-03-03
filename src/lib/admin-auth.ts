@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getPool, initDatabase } from "@/lib/db/connection";
 import type { OrgContext } from "@/lib/org-context";
-import { resolveOrgContext } from "@/lib/org-context";
+import { getSessionOrgSlug } from "@/lib/auth-session";
 
 class AdminAuthError extends Error {
   status: number;
@@ -86,7 +86,16 @@ export async function requireAdminOrg(req: NextRequest): Promise<OrgContext> {
     throw new AdminAuthError("Unauthorized", 401);
   }
 
-  return resolveOrgContext(req);
+  // Resolve org strictly from explicit params or session – never fall back to
+  // "first org in DB" which would leak cross-tenant data.
+  const slug = getOrgSlugFromRequest(req) || getSessionOrgSlug(req);
+  if (!slug) {
+    throw new AdminAuthError(
+      "orgSlug is required – pass ?orgSlug=<slug> or log in via the dashboard",
+      400
+    );
+  }
+  return loadOrgBySlug(slug);
 }
 
 export function toAdminErrorResponse(error: unknown) {
