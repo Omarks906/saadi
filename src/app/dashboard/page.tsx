@@ -118,6 +118,7 @@ async function getFailedPrintJobsCount(orgSlug?: string): Promise<number> {
 
 type ChilliOrder = {
   id: string;
+  callId?: string | null;
   createdAt: string;
   status: string;
   customerName?: string | null;
@@ -273,6 +274,9 @@ export default async function DashboardPage({
       return new Date(order.createdAt) >= getStockholmDayStart();
     });
     const transfersToday = callsToday.filter(isTransfer).length;
+    const orderCallIds = new Set(
+      ordersToday.map((o) => o.callId).filter((id): id is string => Boolean(id))
+    );
     const recentCalls = calls.slice(0, 20);
     const recentOrders = ordersToday
       .filter((o) => !["completed", "cancelled"].includes(o.status))
@@ -292,6 +296,12 @@ export default async function DashboardPage({
     const menuHref = orgSlug
       ? `/dashboard/menu?orgSlug=${encodeURIComponent(orgSlug)}`
       : "/dashboard/menu";
+
+    const updatedAt = new Date().toLocaleTimeString("sv-SE", {
+      timeZone: "Europe/Stockholm",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
     return (
       <div className="container mx-auto px-4 py-8 space-y-8">
@@ -317,6 +327,10 @@ export default async function DashboardPage({
               <span className="text-sm text-gray-400">|</span>
               <span className="text-sm text-gray-500">
                 Est. prep: {prepTime} min
+              </span>
+              <span className="text-sm text-gray-400">|</span>
+              <span className="text-xs text-gray-400">
+                Updated {updatedAt}
               </span>
             </div>
           </div>
@@ -513,9 +527,16 @@ export default async function DashboardPage({
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">
-                          {call.phoneNumber || "Unknown caller"}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {call.phoneNumber || "Unknown caller"}
+                          </p>
+                          {call.callId && orderCallIds.has(call.callId) && (
+                            <span className="px-1.5 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">
+                              Order
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500">
                           {call.createdAt
                             ? new Date(call.createdAt).toLocaleTimeString("sv-SE", {
