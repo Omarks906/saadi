@@ -24,9 +24,21 @@ export async function GET(req: NextRequest) {
 
     switch (period) {
       case "today": {
-        const start = new Date(now);
-        start.setHours(0, 0, 0, 0);
-        since = start.toISOString();
+        // Use Stockholm midnight so "today" matches the restaurant's business day
+        const TZ = "Europe/Stockholm";
+        const fmt = new Intl.DateTimeFormat("en-CA", {
+          timeZone: TZ,
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        });
+        const parts = fmt.formatToParts(now);
+        const p: Record<string, string> = {};
+        for (const part of parts) p[part.type] = part.value;
+        const msIntoDay =
+          (parseInt(p.hour) * 3600 + parseInt(p.minute) * 60 + parseInt(p.second)) * 1000;
+        since = new Date(now.getTime() - msIntoDay).toISOString();
         break;
       }
       case "week": {

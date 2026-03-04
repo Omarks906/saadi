@@ -475,23 +475,29 @@ export default async function DashboardPage({
         )}
 
         {failedPrintJobs > 0 && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm font-semibold text-red-800">
-              Printing issues: {failedPrintJobs} failed jobs
-            </p>
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-red-800">
+                Printer error — {failedPrintJobs} failed {failedPrintJobs === 1 ? "job" : "jobs"}
+              </p>
+              <p className="text-xs text-red-600 mt-0.5">
+                Orders may not have printed. Check the print agent or reprint manually from Kitchen Orders.
+              </p>
+            </div>
+            <Link
+              href={ordersHref}
+              prefetch={false}
+              className="shrink-0 text-xs font-semibold text-red-700 underline hover:text-red-900"
+            >
+              Kitchen Orders
+            </Link>
           </div>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Live Calls</h2>
-              <Link
-                href={orgSlug ? `/dashboard?orgSlug=${encodeURIComponent(orgSlug)}` : "/dashboard"}
-                className="text-sm text-blue-600 hover:text-blue-800"
-              >
-                View all
-              </Link>
+              <h2 className="text-lg font-semibold">Today's Calls</h2>
             </div>
             {recentCalls.length === 0 ? (
               <p className="text-sm text-gray-500">No calls yet.</p>
@@ -520,9 +526,16 @@ export default async function DashboardPage({
                             : "Time unknown"}
                         </p>
                       </div>
-                      <span className="text-xs font-semibold uppercase text-gray-500">
-                        {call.status}
-                      </span>
+                      <div className="text-right">
+                        <span className="text-xs font-semibold uppercase text-gray-500">
+                          {call.status}
+                        </span>
+                        {call.durationSeconds != null && (
+                          <p className="text-xs text-gray-400">
+                            {Math.floor(call.durationSeconds / 60)}m {call.durationSeconds % 60}s
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </Link>
                 ))}
@@ -532,7 +545,7 @@ export default async function DashboardPage({
 
           <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Live Orders</h2>
+              <h2 className="text-lg font-semibold">Active Orders</h2>
               <Link
                 href={ordersHref}
                 prefetch={false}
