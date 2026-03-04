@@ -20,36 +20,46 @@ export async function GET(req: NextRequest) {
     // Calculate analytics
     const totalCalls = calls.length;
     
-    // Calls per type
+    // Calls per type — "router" = calls from the router assistant;
+    // "unclassified" = calls that arrived before a type was determined (null).
+    const byType = (type: string | null) =>
+      type === null
+        ? calls.filter(c => c.businessType == null)
+        : calls.filter(c => c.businessType === type);
+
     const callsByType = {
-      car: calls.filter(c => c.businessType === "car").length,
-      restaurant: calls.filter(c => c.businessType === "restaurant").length,
-      router: calls.filter(c => !c.businessType || c.businessType === "router").length,
-      other: calls.filter(c => c.businessType === "other").length,
+      car: byType("car").length,
+      restaurant: byType("restaurant").length,
+      router: byType("router").length,
+      unclassified: byType(null).length,
+      other: byType("other").length,
     };
 
     // Duration per type
     const durationByType = {
-      car: calculateAverageDuration(calls.filter(c => c.businessType === "car")),
-      restaurant: calculateAverageDuration(calls.filter(c => c.businessType === "restaurant")),
-      router: calculateAverageDuration(calls.filter(c => !c.businessType || c.businessType === "router")),
-      other: calculateAverageDuration(calls.filter(c => c.businessType === "other")),
+      car: calculateAverageDuration(byType("car")),
+      restaurant: calculateAverageDuration(byType("restaurant")),
+      router: calculateAverageDuration(byType("router")),
+      unclassified: calculateAverageDuration(byType(null)),
+      other: calculateAverageDuration(byType("other")),
     };
 
     // Total duration per type
     const totalDurationByType = {
-      car: calculateTotalDuration(calls.filter(c => c.businessType === "car")),
-      restaurant: calculateTotalDuration(calls.filter(c => c.businessType === "restaurant")),
-      router: calculateTotalDuration(calls.filter(c => !c.businessType || c.businessType === "router")),
-      other: calculateTotalDuration(calls.filter(c => c.businessType === "other")),
+      car: calculateTotalDuration(byType("car")),
+      restaurant: calculateTotalDuration(byType("restaurant")),
+      router: calculateTotalDuration(byType("router")),
+      unclassified: calculateTotalDuration(byType(null)),
+      other: calculateTotalDuration(byType("other")),
     };
 
     // Confidence statistics
     const confidenceStats = {
-      car: calculateConfidenceStats(calls.filter(c => c.businessType === "car")),
-      restaurant: calculateConfidenceStats(calls.filter(c => c.businessType === "restaurant")),
-      router: calculateConfidenceStats(calls.filter(c => !c.businessType || c.businessType === "router")),
-      other: calculateConfidenceStats(calls.filter(c => c.businessType === "other")),
+      car: calculateConfidenceStats(byType("car")),
+      restaurant: calculateConfidenceStats(byType("restaurant")),
+      router: calculateConfidenceStats(byType("router")),
+      unclassified: calculateConfidenceStats(byType(null)),
+      other: calculateConfidenceStats(byType("other")),
     };
 
     return NextResponse.json({
