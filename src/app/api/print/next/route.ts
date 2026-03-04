@@ -7,6 +7,16 @@ export async function GET(req: NextRequest) {
     const organizationId = await requirePrintAgentOrgId(req);
     const pool = getPool();
 
+    // Re-queue jobs stuck in 'printing' for more than 60 seconds (agent crash recovery)
+    await pool.query(
+      `UPDATE print_jobs
+       SET status = 'queued', claimed_at = NULL, updated_at = NOW()
+       WHERE organization_id = $1
+         AND status = 'printing'
+         AND claimed_at < NOW() - INTERVAL '60 seconds'`,
+      [organizationId]
+    );
+
     const result = await pool.query(
       `WITH candidate AS (
          SELECT id
