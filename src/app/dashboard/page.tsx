@@ -118,6 +118,7 @@ async function getFailedPrintJobsCount(orgSlug?: string): Promise<number> {
 
 type ChilliOrder = {
   id: string;
+  callId?: string | null;
   createdAt: string;
   status: string;
   customerName?: string | null;
@@ -129,7 +130,7 @@ type ChilliOrder = {
   notes?: string;
 };
 
-async function getOrders(orgSlug?: string): Promise<ChilliOrder[]> {
+async function getOrders(orgSlug?: string, since?: string): Promise<ChilliOrder[]> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const adminToken = getAdminTokenForOrg(orgSlug || undefined);
 
@@ -139,8 +140,11 @@ async function getOrders(orgSlug?: string): Promise<ChilliOrder[]> {
 
   try {
     const url = new URL(`${baseUrl}/api/admin/orders`);
-    url.searchParams.set("limit", "500");
+    url.searchParams.set("limit", "200");
     url.searchParams.set("orgSlug", orgSlug);
+    if (since) {
+      url.searchParams.set("since", since);
+    }
     const response = await fetch(url.toString(), {
       headers: {
         "x-admin-token": adminToken,
@@ -249,7 +253,7 @@ export default async function DashboardPage({
     orgSlug || undefined,
     isChilli ? { since: todaySince, limit: 1000 } : { limit: 50 }
   );
-  const orders = isChilli ? await getOrders(orgSlug || undefined) : [];
+  const orders = isChilli ? await getOrders(orgSlug || undefined, todaySince) : [];
   const failedPrintJobs = await getFailedPrintJobsCount(orgSlug || undefined);
   const analyticsHref = orgSlug
     ? `/dashboard/analytics?orgSlug=${encodeURIComponent(orgSlug)}`
@@ -270,8 +274,13 @@ export default async function DashboardPage({
       return new Date(order.createdAt) >= getStockholmDayStart();
     });
     const transfersToday = callsToday.filter(isTransfer).length;
+    const orderCallIds = new Set(
+      ordersToday.map((o) => o.callId).filter((id): id is string => Boolean(id))
+    );
     const recentCalls = calls.slice(0, 20);
-    const recentOrders = orders.slice(0, 20);
+    const recentOrders = ordersToday
+      .filter((o) => !["completed", "cancelled"].includes(o.status))
+      .slice(0, 20);
     const stats = await getOrderStats(orgSlug || undefined);
 
     // Restaurant status
@@ -287,6 +296,12 @@ export default async function DashboardPage({
     const menuHref = orgSlug
       ? `/dashboard/menu?orgSlug=${encodeURIComponent(orgSlug)}`
       : "/dashboard/menu";
+
+    const updatedAt = new Date().toLocaleTimeString("sv-SE", {
+      timeZone: "Europe/Stockholm",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
     return (
       <div className="container mx-auto px-4 py-8 space-y-8">
@@ -312,6 +327,10 @@ export default async function DashboardPage({
               <span className="text-sm text-gray-400">|</span>
               <span className="text-sm text-gray-500">
                 Est. prep: {prepTime} min
+              </span>
+              <span className="text-sm text-gray-400">|</span>
+              <span className="text-xs text-gray-400">
+                Updated {updatedAt}
               </span>
             </div>
           </div>
@@ -470,23 +489,29 @@ export default async function DashboardPage({
         )}
 
         {failedPrintJobs > 0 && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-sm font-semibold text-red-800">
-              Printing issues: {failedPrintJobs} failed jobs
-            </p>
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-red-800">
+                Printer error — {failedPrintJobs} failed {failedPrintJobs === 1 ? "job" : "jobs"}
+              </p>
+              <p className="text-xs text-red-600 mt-0.5">
+                Orders may not have printed. Check the print agent or reprint manually from Kitchen Orders.
+              </p>
+            </div>
+            <Link
+              href={ordersHref}
+              prefetch={false}
+              className="shrink-0 text-xs font-semibold text-red-700 underline hover:text-red-900"
+            >
+              Kitchen Orders
+            </Link>
           </div>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Live Calls</h2>
-              <Link
-                href={orgSlug ? `/dashboard?orgSlug=${encodeURIComponent(orgSlug)}` : "/dashboard"}
-                className="text-sm text-blue-600 hover:text-blue-800"
-              >
-                View all
-              </Link>
+              <h2 className="text-lg font-semibold">Today's Calls</h2>
             </div>
             {recentCalls.length === 0 ? (
               <p className="text-sm text-gray-500">No calls yet.</p>
@@ -502,18 +527,36 @@ export default async function DashboardPage({
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">
-                          {call.phoneNumber || "Unknown caller"}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {call.phoneNumber || "Unknown caller"}
+                          </p>
+                          {call.callId && orderCallIds.has(call.callId) && (
+                            <span className="px-1.5 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">
+                              Order
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500">
                           {call.createdAt
-                            ? new Date(call.createdAt).toLocaleTimeString()
+                            ? new Date(call.createdAt).toLocaleTimeString("sv-SE", {
+                                timeZone: "Europe/Stockholm",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
                             : "Time unknown"}
                         </p>
                       </div>
-                      <span className="text-xs font-semibold uppercase text-gray-500">
-                        {call.status}
-                      </span>
+                      <div className="text-right">
+                        <span className="text-xs font-semibold uppercase text-gray-500">
+                          {call.status}
+                        </span>
+                        {call.durationSeconds != null && (
+                          <p className="text-xs text-gray-400">
+                            {Math.floor(call.durationSeconds / 60)}m {call.durationSeconds % 60}s
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </Link>
                 ))}
@@ -523,7 +566,7 @@ export default async function DashboardPage({
 
           <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Live Orders</h2>
+              <h2 className="text-lg font-semibold">Active Orders</h2>
               <Link
                 href={ordersHref}
                 prefetch={false}
@@ -546,13 +589,30 @@ export default async function DashboardPage({
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">
-                          Order {order.id}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {order.customerName || "Unknown customer"}
+                          </p>
+                          {order.fulfillmentType && (
+                            <span
+                              className={`px-1.5 py-0.5 text-xs font-semibold rounded ${
+                                order.fulfillmentType === "delivery"
+                                  ? "bg-purple-100 text-purple-700"
+                                  : "bg-blue-100 text-blue-700"
+                              }`}
+                            >
+                              {order.fulfillmentType === "delivery" ? "Delivery" : "Pickup"}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500">
                           {order.items?.length ? `${order.items.length} items` : "Items pending"}
                           {order.createdAt
-                            ? ` · ${new Date(order.createdAt).toLocaleTimeString()}`
+                            ? ` · ${new Date(order.createdAt).toLocaleTimeString("sv-SE", {
+                                timeZone: "Europe/Stockholm",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}`
                             : ""}
                         </p>
                       </div>
@@ -562,7 +622,7 @@ export default async function DashboardPage({
                         </span>
                         {order.total !== undefined && order.total !== null && (
                           <p className="text-sm font-semibold text-gray-900">
-                            {Number(order.total).toFixed(2)}
+                            {Number(order.total).toFixed(0)} kr
                           </p>
                         )}
                       </div>
