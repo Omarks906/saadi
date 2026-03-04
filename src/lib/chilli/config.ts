@@ -94,51 +94,46 @@ export const CHILLI_CONFIG: ChilliConfig = {
 
 // Helper functions
 
-export function isCurrentlyOpen(): boolean {
-  const now = new Date();
-  const dayIndex = now.getDay(); // 0 = Sunday
-  const dayNames: DayOfWeek[] = [
-    "sunday",
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-  ];
-  const today = dayNames[dayIndex];
-
-  const hours = CHILLI_CONFIG.openingHours.find((h) => h.day === today);
-  if (!hours || hours.closed) return false;
-
-  const currentTime = now.toLocaleTimeString("sv-SE", {
+function getStockholmParts(now: Date): { day: DayOfWeek; time: string; hour: number; dayIndex: number } {
+  const TZ = "Europe/Stockholm";
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: TZ,
+    weekday: "short",
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
   });
+  const parts = fmt.formatToParts(now);
+  const p: Record<string, string> = {};
+  for (const part of parts) p[part.type] = part.value;
 
-  return currentTime >= hours.open && currentTime <= hours.close;
+  const weekdayMap: Record<string, DayOfWeek> = {
+    Sun: "sunday", Mon: "monday", Tue: "tuesday", Wed: "wednesday",
+    Thu: "thursday", Fri: "friday", Sat: "saturday",
+  };
+  const dayNames: DayOfWeek[] = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const day = weekdayMap[p.weekday] ?? "monday";
+  const time = `${p.hour}:${p.minute}`;
+  const hour = parseInt(p.hour, 10);
+  const dayIndex = dayNames.indexOf(day);
+  return { day, time, hour, dayIndex };
+}
+
+export function isCurrentlyOpen(): boolean {
+  const { day, time } = getStockholmParts(new Date());
+  const hours = CHILLI_CONFIG.openingHours.find((h) => h.day === day);
+  if (!hours || hours.closed) return false;
+  return time >= hours.open && time <= hours.close;
 }
 
 export function getTodaysHours(): OpeningHours | undefined {
-  const now = new Date();
-  const dayIndex = now.getDay();
-  const dayNames: DayOfWeek[] = [
-    "sunday",
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-  ];
-  const today = dayNames[dayIndex];
-  return CHILLI_CONFIG.openingHours.find((h) => h.day === today);
+  const { day } = getStockholmParts(new Date());
+  return CHILLI_CONFIG.openingHours.find((h) => h.day === day);
 }
 
 export function getNextOpenTime(): { day: string; time: string } | null {
   const now = new Date();
-  const dayIndex = now.getDay();
+  const { dayIndex, time: currentTime } = getStockholmParts(now);
   const dayNames: DayOfWeek[] = [
     "sunday",
     "monday",
@@ -155,12 +150,6 @@ export function getNextOpenTime(): { day: string; time: string } | null {
     const hours = CHILLI_CONFIG.openingHours.find((h) => h.day === dayName);
 
     if (hours && !hours.closed) {
-      const currentTime = now.toLocaleTimeString("sv-SE", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
-
       if (i === 0 && currentTime < hours.open) {
         return { day: "Idag", time: hours.open };
       }
@@ -181,9 +170,7 @@ export function getDeliveryZoneByPostalCode(postalCode: string): DeliveryZone | 
 }
 
 export function isRushHour(): boolean {
-  const now = new Date();
-  const hour = now.getHours();
-  const dayIndex = now.getDay();
+  const { hour, dayIndex } = getStockholmParts(new Date());
 
   // Rush hours: 11:30-13:30 (lunch), 17:00-19:30 (dinner)
   const isLunchRush = hour >= 11 && hour < 14;

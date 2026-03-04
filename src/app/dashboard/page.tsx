@@ -129,7 +129,7 @@ type ChilliOrder = {
   notes?: string;
 };
 
-async function getOrders(orgSlug?: string): Promise<ChilliOrder[]> {
+async function getOrders(orgSlug?: string, since?: string): Promise<ChilliOrder[]> {
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
   const adminToken = getAdminTokenForOrg(orgSlug || undefined);
 
@@ -139,8 +139,11 @@ async function getOrders(orgSlug?: string): Promise<ChilliOrder[]> {
 
   try {
     const url = new URL(`${baseUrl}/api/admin/orders`);
-    url.searchParams.set("limit", "500");
+    url.searchParams.set("limit", "200");
     url.searchParams.set("orgSlug", orgSlug);
+    if (since) {
+      url.searchParams.set("since", since);
+    }
     const response = await fetch(url.toString(), {
       headers: {
         "x-admin-token": adminToken,
@@ -249,7 +252,7 @@ export default async function DashboardPage({
     orgSlug || undefined,
     isChilli ? { since: todaySince, limit: 1000 } : { limit: 50 }
   );
-  const orders = isChilli ? await getOrders(orgSlug || undefined) : [];
+  const orders = isChilli ? await getOrders(orgSlug || undefined, todaySince) : [];
   const failedPrintJobs = await getFailedPrintJobsCount(orgSlug || undefined);
   const analyticsHref = orgSlug
     ? `/dashboard/analytics?orgSlug=${encodeURIComponent(orgSlug)}`
@@ -271,7 +274,9 @@ export default async function DashboardPage({
     });
     const transfersToday = callsToday.filter(isTransfer).length;
     const recentCalls = calls.slice(0, 20);
-    const recentOrders = orders.slice(0, 20);
+    const recentOrders = ordersToday
+      .filter((o) => !["completed", "cancelled"].includes(o.status))
+      .slice(0, 20);
     const stats = await getOrderStats(orgSlug || undefined);
 
     // Restaurant status
@@ -507,7 +512,11 @@ export default async function DashboardPage({
                         </p>
                         <p className="text-xs text-gray-500">
                           {call.createdAt
-                            ? new Date(call.createdAt).toLocaleTimeString()
+                            ? new Date(call.createdAt).toLocaleTimeString("sv-SE", {
+                                timeZone: "Europe/Stockholm",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
                             : "Time unknown"}
                         </p>
                       </div>
@@ -546,13 +555,30 @@ export default async function DashboardPage({
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">
-                          Order {order.id}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {order.customerName || "Unknown customer"}
+                          </p>
+                          {order.fulfillmentType && (
+                            <span
+                              className={`px-1.5 py-0.5 text-xs font-semibold rounded ${
+                                order.fulfillmentType === "delivery"
+                                  ? "bg-purple-100 text-purple-700"
+                                  : "bg-blue-100 text-blue-700"
+                              }`}
+                            >
+                              {order.fulfillmentType === "delivery" ? "Delivery" : "Pickup"}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-500">
                           {order.items?.length ? `${order.items.length} items` : "Items pending"}
                           {order.createdAt
-                            ? ` · ${new Date(order.createdAt).toLocaleTimeString()}`
+                            ? ` · ${new Date(order.createdAt).toLocaleTimeString("sv-SE", {
+                                timeZone: "Europe/Stockholm",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}`
                             : ""}
                         </p>
                       </div>
@@ -562,7 +588,7 @@ export default async function DashboardPage({
                         </span>
                         {order.total !== undefined && order.total !== null && (
                           <p className="text-sm font-semibold text-gray-900">
-                            {Number(order.total).toFixed(2)}
+                            {Number(order.total).toFixed(0)} kr
                           </p>
                         )}
                       </div>
