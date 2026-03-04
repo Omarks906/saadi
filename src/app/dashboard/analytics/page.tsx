@@ -195,6 +195,12 @@ export default async function AnalyticsPage({
               <span className="text-sm text-gray-600">Router</span>
               <span className="text-lg font-semibold text-gray-600">{analytics.summary.callsByType.router}</span>
             </div>
+            {analytics.summary.callsByType.unclassified > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-400 italic">Unclassified</span>
+                <span className="text-lg font-semibold text-gray-400">{analytics.summary.callsByType.unclassified}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -221,7 +227,7 @@ export default async function AnalyticsPage({
       {/* Total Duration */}
       <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm mb-6">
         <h2 className="text-lg font-semibold mb-4">Total Duration by Type</h2>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <span className="text-sm text-gray-600">Car</span>
             <p className="text-2xl font-bold text-blue-600">{formatDuration(analytics.duration.total.car)}</p>
@@ -234,45 +240,55 @@ export default async function AnalyticsPage({
             <span className="text-sm text-gray-600">Router</span>
             <p className="text-2xl font-bold text-gray-600">{formatDuration(analytics.duration.total.router)}</p>
           </div>
+          {analytics.summary.callsByType.unclassified > 0 && (
+            <div>
+              <span className="text-sm text-gray-400 italic">Unclassified</span>
+              <p className="text-2xl font-bold text-gray-400">{formatDuration(analytics.duration.total.unclassified)}</p>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Confidence Statistics */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
-        <h2 className="text-lg font-semibold mb-4">Confidence Statistics</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          {(["car", "restaurant", "router", "other"] as const).map((type) => {
-            const stats = analytics.confidence[type];
-            return (
-              <div key={type} className="border border-gray-200 rounded p-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-3 capitalize">{type}</h3>
-                {stats.count > 0 ? (
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Average</span>
-                      <span className="font-semibold">{stats.average?.toFixed(2)}</span>
+      {/* Confidence Statistics — only shown when at least one type has data */}
+      {(["car", "restaurant", "router", "other"] as const).some(
+        (t) => analytics.confidence[t]?.count > 0
+      ) && (
+        <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Confidence Statistics</h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            {(["car", "restaurant", "router", "other"] as const).map((type) => {
+              const stats = analytics.confidence[type];
+              return (
+                <div key={type} className="border border-gray-200 rounded p-4">
+                  <h3 className="text-sm font-medium text-gray-700 mb-3 capitalize">{type}</h3>
+                  {stats.count > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Average</span>
+                        <span className="font-semibold">{stats.average?.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Min</span>
+                        <span className="font-semibold">{stats.min}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Max</span>
+                        <span className="font-semibold">{stats.max}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-sm text-gray-600">Count</span>
+                        <span className="font-semibold">{stats.count}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Min</span>
-                      <span className="font-semibold">{stats.min}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Max</span>
-                      <span className="font-semibold">{stats.max}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-600">Count</span>
-                      <span className="font-semibold">{stats.count}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-400">No data</p>
-                )}
-              </div>
-            );
-          })}
+                  ) : (
+                    <p className="text-sm text-gray-400">No data</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="mt-6 text-sm text-gray-500">
         Last updated: {new Date(analytics.timestamp).toLocaleString()}
