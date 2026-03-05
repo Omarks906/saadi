@@ -31,7 +31,7 @@ export type TicketOrder = {
   currency?: string;
 };
 
-const MAX_LINE_LENGTH = 42;
+const MAX_LINE_LENGTH = 48;
 
 function toPrintableLine(text: string): string[] {
   const trimmed = text.trim();
@@ -133,8 +133,12 @@ export function renderTicket(order: TicketOrder): string {
     lines.push(fulfillment.slice(0, MAX_LINE_LENGTH));
   }
 
-  if (order.customer?.name) {
+  if (order.customer?.name?.trim()) {
     lines.push(...toPrintableLine(`Customer: ${order.customer.name}`));
+  }
+
+  if (order.customer?.phone?.trim()) {
+    lines.push(...toPrintableLine(order.customer.phone));
   }
 
   lines.push(divider);

@@ -6,8 +6,8 @@ function assertLineLength(output: string) {
   const lines = output.split("\n");
   for (const line of lines) {
     assert.ok(
-      line.length <= 42,
-      `Line exceeds 42 chars (${line.length}): ${line}`
+      line.length <= 48,
+      `Line exceeds 48 chars (${line.length}): ${line}`
     );
   }
 }
@@ -51,7 +51,7 @@ test("renderTicket renders pickup order", () => {
   assert.match(output, /Gluten-free crust/);
   assert.match(output, /\* Cut into 8 slices/);
   assert.match(output, /Customer: Sam Taylor/);
-  assert.doesNotMatch(output, /Phone: \+1 555-222-3333/);
+  assert.match(output, /\+1 555-222-3333/);
   assert.doesNotMatch(output, /TOTAL: 42.50 USD/);
   assertLineLength(output);
 });
