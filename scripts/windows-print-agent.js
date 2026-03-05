@@ -130,12 +130,32 @@ async function printTicketText(ticketText, jobId) {
 
   try {
     const escapedPath = filePath.replace(/\\/g, "\\\\");
-    const printerArg = PRINTER_NAME
-      ? ` -Name "${PRINTER_NAME.replace(/"/g, '\\"')}"`
-      : "";
+    const escapedPrinter = PRINTER_NAME.replace(/"/g, '\\"');
     const script = `
 $ErrorActionPreference = "Stop"
-Get-Content -Raw -Path "${escapedPath}" | Out-Printer${printerArg}
+Add-Type -AssemblyName System.Drawing
+$rawText = [System.IO.File]::ReadAllText("${escapedPath}", [System.Text.Encoding]::UTF8)
+$printLines = $rawText -split "\`r?\`n"
+$pd = New-Object System.Drawing.Printing.PrintDocument
+${PRINTER_NAME ? `$pd.PrinterSettings.PrinterName = "${escapedPrinter}"` : ""}
+$pd.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0, 0, 0, 0)
+$script:idx = 0
+$pd.add_PrintPage({
+  param($s, $e)
+  $font = New-Object System.Drawing.Font("Courier New", 9)
+  $brush = [System.Drawing.Brushes]::Black
+  $y = [float]0
+  $lh = $font.GetHeight($e.Graphics)
+  while ($script:idx -lt $printLines.Count) {
+    if ($y + $lh -gt $e.PageBounds.Height) { $e.HasMorePages = $true; break }
+    $e.Graphics.DrawString($printLines[$script:idx], $font, $brush, [float]0, $y)
+    $y += $lh
+    $script:idx++
+  }
+  $font.Dispose()
+})
+$pd.Print()
+$pd.Dispose()
 `;
 
     await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {

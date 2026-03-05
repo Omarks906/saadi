@@ -56,6 +56,19 @@ test("renderTicket renders pickup order", () => {
   assertLineLength(output);
 });
 
+test("renderTicket shortens UUID order numbers", () => {
+  const order: TicketOrder = {
+    orderNumber: "019cbe0b-d8ba-7222-97e9-8f9d844dab1",
+    fulfillment: "pickup",
+    items: [{ name: "Burger" }],
+  };
+  const output = renderTicket(order);
+  // Should show shortened 8-char hex, not the full UUID
+  assert.match(output, /ORDER #019CBE0B/);
+  assert.doesNotMatch(output, /d8ba/);
+  assertLineLength(output);
+});
+
 test("renderTicket renders delivery order with allergies", () => {
   const order: TicketOrder = {
     restaurantName: "Chilli Pizza",
