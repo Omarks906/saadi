@@ -14,7 +14,7 @@ import {
 import { getBusinessTypeFromAssistantId } from "@/lib/vapi-assistant-map";
 import { detectBusinessTypeFromCall, shouldSwitch } from "@/lib/business-type-detector";
 import { runPrintPipeline } from "@/lib/printing/print-pipeline";
-import { resolveOrgContextForWebhook } from "@/lib/org-context";
+import { resolveOrgContextForWebhook, UnresolvableOrgError } from "@/lib/org-context";
 import { extractOrderFromTranscript } from "@/lib/order-extract";
 import { getPool, initDatabase } from "@/lib/db/connection";
 
@@ -133,7 +133,16 @@ export async function POST(req: NextRequest) {
       "endOfCallReportKeys:",
       Object.keys(body?.endOfCallReport || {})
     );
-    const org = await resolveOrgContextForWebhook(req, body);
+    let org;
+    try {
+      org = await resolveOrgContextForWebhook(req, body);
+    } catch (err) {
+      if (err instanceof UnresolvableOrgError) {
+        console.log(`[VAPI Webhook] Ignoring event from unknown org: ${err.message}`);
+        return NextResponse.json({ success: true, message: "Ignored: unknown org" });
+      }
+      throw err;
+    }
     const resolvedAssistantId = extractAssistantId(body);
     if (resolvedAssistantId) {
       console.log("[VAPI Webhook] Resolved assistantId:", resolvedAssistantId);

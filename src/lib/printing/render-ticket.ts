@@ -121,7 +121,11 @@ export function renderTicket(order: TicketOrder): string {
   const divider = "-".repeat(MAX_LINE_LENGTH);
 
   if (order.orderNumber) {
-    lines.push(`ORDER #${order.orderNumber}`.slice(0, MAX_LINE_LENGTH));
+    // Shorten long UUIDs to first 8 chars to fit on one line
+    const num = order.orderNumber.length > 12
+      ? order.orderNumber.replace(/-/g, "").slice(0, 8).toUpperCase()
+      : order.orderNumber;
+    lines.push(`ORDER #${num}`.slice(0, MAX_LINE_LENGTH));
   }
 
   const fulfillment = normalizeFulfillment(order.fulfillment);

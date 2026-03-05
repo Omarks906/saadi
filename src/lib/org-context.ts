@@ -92,6 +92,25 @@ function parsePhoneOrgMap(raw?: string): Record<string, string> {
   return mapping;
 }
 
+function parseAssistantOrgMap(raw?: string): Record<string, string> {
+  if (!raw) return {};
+  const entries = raw.split(",").map((entry) => entry.trim()).filter(Boolean);
+  const mapping: Record<string, string> = {};
+  for (const entry of entries) {
+    const [assistantId, slugRaw] = entry.split(/[:=]/).map((part) => part.trim());
+    if (!assistantId || !slugRaw) continue;
+    mapping[assistantId] = slugRaw;
+  }
+  return mapping;
+}
+
+export class UnresolvableOrgError extends Error {
+  constructor(reason: string) {
+    super(`Cannot resolve org for webhook: ${reason}`);
+    this.name = "UnresolvableOrgError";
+  }
+}
+
 type PhoneCandidate = { label: string; value: any };
 
 function getPhoneCandidates(event: any): PhoneCandidate[] {
@@ -315,16 +334,45 @@ export async function resolveOrgContextForWebhook(
     return org;
   }
 
+  // Try assistantId → org mapping via ORG_SLUG_BY_ASSISTANT_ID env var
+  // Format: "assistantId1:orgSlug1,assistantId2:orgSlug2"
+  const assistantMap = parseAssistantOrgMap(process.env.ORG_SLUG_BY_ASSISTANT_ID);
+  const assistantId =
+    event?.assistantId ||
+    event?.assistant_id ||
+    event?.assistant?.id ||
+    event?.message?.assistantId ||
+    event?.message?.assistant?.id ||
+    event?.call?.assistantId ||
+    event?.call?.assistant?.id;
+  if (assistantId && assistantMap[assistantId]) {
+    const orgSlug = assistantMap[assistantId];
+    const org = await loadOrgBySlug(orgSlug);
+    if (!org) {
+      throw new Error(`Organization not found for assistantId ${assistantId}`);
+    }
+    console.log(
+      `[org] resolved slug=${org.slug} id=${org.id} reason=assistantId assistantId=${assistantId}`
+    );
+    return org;
+  }
+
+  // Log why resolution failed before rejecting
   if (inboundPhone) {
     console.log(`[org] no phone map match phone=${inboundPhone}`);
   } else if (candidateReport.length > 0) {
-    console.log(
-      `[org] no phone extracted candidates=${candidateReport.join(" | ")}`
-    );
+    console.log(`[org] no phone extracted candidates=${candidateReport.join(" | ")}`);
   } else {
     console.log(`[org] phone debug ${getPhoneDebugReport(event)}`);
     console.log("[org] no phone candidates found in webhook");
   }
+  if (assistantId) {
+    console.log(`[org] no assistantId map match assistantId=${assistantId}`);
+  }
 
-  return resolveOrgContext(req);
+  // Do NOT fall back to first org or DEFAULT_ORG_SLUG for webhooks –
+  // that would silently attribute calls from other Vapi numbers to the wrong org.
+  throw new UnresolvableOrgError(
+    `no phone or assistantId match (phone=${inboundPhone ?? "none"} assistantId=${assistantId ?? "none"})`
+  );
 }
