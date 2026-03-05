@@ -41,18 +41,18 @@ test("renderTicket renders pickup order", () => {
   };
 
   const output = renderTicket(order);
-  assert.match(output, /Chilli Pizza/);
-  assert.match(output, /\+1 555-123-4567/);
+  assert.doesNotMatch(output, /Chilli Pizza/);
+  assert.doesNotMatch(output, /\+1 555-123-4567/);
   assert.match(output, /ORDER #A1001/);
-  assert.match(output, /CONFIRMED BY PHONE/);
+  assert.doesNotMatch(output, /CONFIRMED BY PHONE/);
   assert.match(output, /PICKUP/);
   assert.match(output, /2x Pepperoni Pizza/);
   assert.match(output, /- Extra cheese/);
   assert.match(output, /Gluten-free crust/);
-  assert.match(output, /Notes: Cut into 8 slices/);
+  assert.match(output, /\* Cut into 8 slices/);
   assert.match(output, /Customer: Sam Taylor/);
-  assert.match(output, /Phone: \+1 555-222-3333/);
-  assert.match(output, /TOTAL: 42.50 USD/);
+  assert.doesNotMatch(output, /Phone: \+1 555-222-3333/);
+  assert.doesNotMatch(output, /TOTAL: 42.50 USD/);
   assertLineLength(output);
 });
 
@@ -81,8 +81,8 @@ test("renderTicket renders delivery order with allergies", () => {
   assert.match(output, /ORDER #B2002/);
   assert.match(output, /DELIVERY/);
   assert.match(output, /Veggie Pizza/);
-  assert.match(output, /Allergies: Peanut allergy/);
-  assert.match(output, /Address: 123 Main Street, Unit 4B, Springfield/);
-  assert.match(output, /Printed automatically via Phone Assistant/);
+  assert.match(output, /!! ALLERGIES: Peanut allergy/);
+  assert.doesNotMatch(output, /Address:/);
+  assert.doesNotMatch(output, /Printed automatically via Phone Assistant/);
   assertLineLength(output);
 });

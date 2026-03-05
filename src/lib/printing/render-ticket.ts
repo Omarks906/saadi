@@ -118,43 +118,22 @@ function formatTwoColumnLine(left: string, right: string): string {
 
 export function renderTicket(order: TicketOrder): string {
   const lines: string[] = [];
-
-  if (order.restaurantName) {
-    lines.push(...toPrintableLine(order.restaurantName));
-  }
-
-  if (order.restaurantPhone) {
-    lines.push(...toPrintableLine(order.restaurantPhone));
-  }
+  const divider = "-".repeat(MAX_LINE_LENGTH);
 
   if (order.orderNumber) {
     lines.push(`ORDER #${order.orderNumber}`.slice(0, MAX_LINE_LENGTH));
-  }
-
-  lines.push("CONFIRMED BY PHONE");
-
-  const timeValue = formatTime(order.confirmedAt);
-  if (timeValue) {
-    lines.push(...toPrintableLine(`Time: ${timeValue}`));
-  }
-
-  if (order.customer?.name && order.customer?.phone) {
-    lines.push(
-      formatTwoColumnLine(
-        `Customer: ${order.customer.name}`,
-        `Phone: ${order.customer.phone}`
-      )
-    );
-  } else if (order.customer?.name) {
-    lines.push(...toPrintableLine(`Customer: ${order.customer.name}`));
-  } else if (order.customer?.phone) {
-    lines.push(...toPrintableLine(`Phone: ${order.customer.phone}`));
   }
 
   const fulfillment = normalizeFulfillment(order.fulfillment);
   if (fulfillment) {
     lines.push(fulfillment.slice(0, MAX_LINE_LENGTH));
   }
+
+  if (order.customer?.name) {
+    lines.push(...toPrintableLine(`Customer: ${order.customer.name}`));
+  }
+
+  lines.push(divider);
 
   if (order.items && order.items.length > 0) {
     for (const item of order.items) {
@@ -166,35 +145,29 @@ export function renderTicket(order: TicketOrder): string {
         for (const modifier of item.modifiers) {
           const modifierText = formatModifier(modifier);
           if (modifierText) {
-            lines.push(...toPrintableLine(`- ${modifierText}`));
+            lines.push(...toPrintableLine(`  - ${modifierText}`));
           }
         }
       }
 
       if (item.notes) {
-        lines.push(...toPrintableLine(`Notes: ${item.notes}`));
+        lines.push(...toPrintableLine(`  * ${item.notes}`));
       }
     }
+  }
+
+  const hasFooter = order.allergies || order.notes;
+  if (hasFooter) {
+    lines.push(divider);
+  }
+
+  if (order.allergies) {
+    lines.push(...toPrintableLine(`!! ALLERGIES: ${order.allergies}`));
   }
 
   if (order.notes) {
     lines.push(...toPrintableLine(`Notes: ${order.notes}`));
   }
-
-  if (order.allergies) {
-    lines.push(...toPrintableLine(`Allergies: ${order.allergies}`));
-  }
-
-  if (order.customer?.address) {
-    lines.push(...toPrintableLine(`Address: ${order.customer.address}`));
-  }
-
-  const total = formatMoney(order.totalAmount, order.currency);
-  if (total) {
-    lines.push(...toPrintableLine(`TOTAL: ${total}`));
-  }
-
-  lines.push("Printed automatically via Phone Assistant");
 
   return lines.join("\n");
 }
