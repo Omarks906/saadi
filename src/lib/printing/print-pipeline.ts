@@ -131,6 +131,41 @@ function rowToPrintJob(row: any): PrintJobRecord {
   };
 }
 
+function looksLikePhone(value?: string | null): boolean {
+  if (!value) return false;
+  return /^[+\d\s\-().]{7,}$/.test(value.trim());
+}
+
+function buildTicketItems(order: Order, eventOrder: any): TicketOrder["items"] {
+  // Prefer rawEvent items — they carry modifiers/toppings arrays.
+  // Fall back to DB items, which carry modifiers as a description string.
+  const sourceItems: any[] = eventOrder?.items?.length ? eventOrder.items : (order.items ?? []);
+  if (!sourceItems.length) return undefined;
+
+  return sourceItems.map((item: any) => {
+    const rawModifiers: string[] = [
+      ...(item.modifiers || []),
+      ...(item.toppings || []),
+      ...(item.options || []),
+    ].filter(Boolean);
+
+    // Fall back: split description string ("extra X, extra Y") into individual modifiers
+    const modifiers: string[] = rawModifiers.length
+      ? rawModifiers
+      : (item.description
+          ? item.description.split(/,\s*/).map((s: string) => s.trim()).filter(Boolean)
+          : []);
+
+    return {
+      name: item.name || item.item || "Item",
+      quantity: item.quantity,
+      price: item.price,
+      modifiers: modifiers.length ? modifiers : undefined,
+      notes: item.notes,
+    };
+  });
+}
+
 function buildTicketOrder(order: Order): TicketOrder {
   const metadata = (order.metadata || {}) as Record<string, any>;
   const rawEvent = (order.rawEvent || {}) as Record<string, any>;
@@ -139,6 +174,14 @@ function buildTicketOrder(order: Order): TicketOrder {
   const eventRestaurant = eventOrder?.restaurant || metadata.restaurant;
   const structuredOutput = metadata.structuredOutput || metadata.structured_output;
   const extraction = metadata.extraction || {};
+
+  // Resolve customer name — reject values that are actually phone numbers
+  const rawName =
+    metadata.customerName ||
+    structuredOutput?.customerName ||
+    eventCustomer?.name ||
+    order.customerName;
+  const customerName = looksLikePhone(rawName) ? undefined : rawName;
 
   return {
     restaurantName: metadata.restaurantName || eventRestaurant?.name || metadata.businessName,
@@ -152,7 +195,7 @@ function buildTicketOrder(order: Order): TicketOrder {
       order.fulfillmentType ||
       eventOrder?.fulfillment ||
       eventOrder?.type,
-    items: order.items,
+    items: buildTicketItems(order, eventOrder),
     notes:
       metadata.notes ||
       eventOrder?.notes ||
@@ -160,11 +203,7 @@ function buildTicketOrder(order: Order): TicketOrder {
       order.specialInstructions,
     allergies: metadata.allergies || eventOrder?.allergies || order.allergies,
     customer: {
-      name:
-        metadata.customerName ||
-        structuredOutput?.customerName ||
-        eventCustomer?.name ||
-        order.customerName,
+      name: customerName,
       phone:
         metadata.customerPhone ||
         structuredOutput?.customerPhone ||
