@@ -53,6 +53,8 @@ test("renderTicket renders pickup order", () => {
   assert.match(output, /Customer: Sam Taylor/);
   assert.match(output, /\+1 555-222-3333/);
   assert.doesNotMatch(output, /TOTAL: 42.50 USD/);
+  // Items appear before order number
+  assert.ok(output.indexOf("Pepperoni Pizza") < output.indexOf("ORDER #A1001"));
   assertLineLength(output);
 });
 

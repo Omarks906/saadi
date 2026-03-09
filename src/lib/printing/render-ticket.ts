@@ -120,29 +120,7 @@ export function renderTicket(order: TicketOrder): string {
   const lines: string[] = [];
   const divider = "-".repeat(MAX_LINE_LENGTH);
 
-  if (order.orderNumber) {
-    // Shorten long UUIDs to first 8 chars to fit on one line
-    const num = order.orderNumber.length > 12
-      ? order.orderNumber.replace(/-/g, "").slice(0, 8).toUpperCase()
-      : order.orderNumber;
-    lines.push(`ORDER #${num}`.slice(0, MAX_LINE_LENGTH));
-  }
-
-  const fulfillment = normalizeFulfillment(order.fulfillment);
-  if (fulfillment) {
-    lines.push(fulfillment.slice(0, MAX_LINE_LENGTH));
-  }
-
-  if (order.customer?.name?.trim()) {
-    lines.push(...toPrintableLine(`Customer: ${order.customer.name}`));
-  }
-
-  if (order.customer?.phone?.trim()) {
-    lines.push(...toPrintableLine(order.customer.phone));
-  }
-
-  lines.push(divider);
-
+  // --- ITEMS (top — kitchen reads this first) ---
   if (order.items && order.items.length > 0) {
     for (const item of order.items) {
       const name = item.name || "Item";
@@ -164,9 +142,28 @@ export function renderTicket(order: TicketOrder): string {
     }
   }
 
-  const hasFooter = order.allergies || order.notes;
-  if (hasFooter) {
-    lines.push(divider);
+  lines.push(divider);
+
+  // --- ORDER INFO (bottom) ---
+  if (order.orderNumber) {
+    // Shorten long UUIDs to first 8 chars to fit on one line
+    const num = order.orderNumber.length > 12
+      ? order.orderNumber.replace(/-/g, "").slice(0, 8).toUpperCase()
+      : order.orderNumber;
+    lines.push(`ORDER #${num}`.slice(0, MAX_LINE_LENGTH));
+  }
+
+  const fulfillment = normalizeFulfillment(order.fulfillment);
+  if (fulfillment) {
+    lines.push(fulfillment.slice(0, MAX_LINE_LENGTH));
+  }
+
+  if (order.customer?.name?.trim()) {
+    lines.push(...toPrintableLine(`Customer: ${order.customer.name}`));
+  }
+
+  if (order.customer?.phone?.trim()) {
+    lines.push(...toPrintableLine(order.customer.phone));
   }
 
   if (order.allergies) {
