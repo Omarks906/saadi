@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getAdminTokenForOrg } from "@/lib/admin-token";
 import { getSessionOrgSlugFromCookies } from "@/lib/auth-session";
+import { NewOrderAlert } from "./new-order-alert";
 
 export const dynamic = "force-dynamic";
 
@@ -104,8 +105,11 @@ export default async function OrdersPage({
     );
   }
 
+  const latestOrderTime = orders[0]?.createdAt ?? new Date().toISOString();
+
   return (
     <div className="container mx-auto px-4 py-8 space-y-6">
+      <NewOrderAlert orgSlug={orgSlug} initialLatest={latestOrderTime} />
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Kitchen Orders</h1>
