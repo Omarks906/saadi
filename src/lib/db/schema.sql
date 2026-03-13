@@ -70,6 +70,10 @@ INSERT INTO organizations (slug, name)
 VALUES ('chilli', 'Restaurang & Pizzeria Chilli')
 ON CONFLICT (slug) DO NOTHING;
 
+INSERT INTO organizations (slug, name)
+VALUES ('canada-usa', 'Canada & USA Pilot')
+ON CONFLICT (slug) DO NOTHING;
+
 -- Print Jobs Table
 CREATE TABLE IF NOT EXISTS print_jobs (
   id UUID PRIMARY KEY,
