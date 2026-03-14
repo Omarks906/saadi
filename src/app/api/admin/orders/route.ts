@@ -78,9 +78,6 @@ export async function GET(req: NextRequest) {
     let orders = [];
     try {
       const org = await requireAdminOrg(req);
-      if (org.slug !== "chilli") {
-        return NextResponse.json({ error: "Not available" }, { status: 404 });
-      }
 
       orders = await listOrdersByOrganization(org.id, {
         limit,

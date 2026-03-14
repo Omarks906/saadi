@@ -74,9 +74,6 @@ export async function GET(
 
     try {
       const org = await requireAdminOrg(req);
-      if (org.slug !== "chilli") {
-        return NextResponse.json({ error: "Not available" }, { status: 404 });
-      }
       const order = await findOrderByOrderIdByOrganization(orderId, org.id);
       if (!order) {
         return NextResponse.json({ error: "Order not found" }, { status: 404 });
@@ -136,9 +133,6 @@ export async function PATCH(
 
     try {
       const org = await requireAdminOrg(req);
-      if (org.slug !== "chilli") {
-        return NextResponse.json({ error: "Not available" }, { status: 404 });
-      }
 
       const body = await req.json();
       const newStatus = body.status as OrderStatus;
