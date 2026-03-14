@@ -156,9 +156,15 @@ export default async function OrdersPage({
                                 <span className={`text-xs px-2 py-0.5 rounded ${
                                   order.fulfillmentType === "delivery"
                                     ? "bg-purple-100 text-purple-700"
+                                    : order.fulfillmentType === "dine_in"
+                                    ? "bg-green-100 text-green-700"
                                     : "bg-blue-100 text-blue-700"
                                 }`}>
-                                  {order.fulfillmentType === "delivery" ? "Delivery" : "Pickup"}
+                                  {order.fulfillmentType === "delivery"
+                                    ? "Delivery"
+                                    : order.fulfillmentType === "dine_in"
+                                    ? "Eat In"
+                                    : "Pickup"}
                                 </span>
                               )}
                             </div>

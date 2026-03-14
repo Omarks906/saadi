@@ -88,6 +88,7 @@ function normalizeFulfillment(value?: string): string | null {
   const normalized = value.toLowerCase();
   if (normalized.includes("deliver")) return "DELIVERY";
   if (normalized.includes("pickup") || normalized.includes("pick up")) return "PICKUP";
+  if (normalized.includes("dine_in") || normalized.includes("dine-in") || normalized.includes("dine in")) return "EAT IN";
   return value.toUpperCase();
 }
 

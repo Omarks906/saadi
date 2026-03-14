@@ -34,7 +34,7 @@ export type OrderStatus =
   | "cancelled";   // Order cancelled
 
 // Fulfillment type - how the order will be fulfilled
-export type FulfillmentType = "delivery" | "pickup";
+export type FulfillmentType = "delivery" | "pickup" | "dine_in";
 
 export type Order = {
   id: string;
