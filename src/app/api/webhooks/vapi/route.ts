@@ -16,6 +16,7 @@ import { detectBusinessTypeFromCall, shouldSwitch } from "@/lib/business-type-de
 import { runPrintPipeline } from "@/lib/printing/print-pipeline";
 import { resolveOrgContextForWebhook, UnresolvableOrgError } from "@/lib/org-context";
 import { extractOrderFromTranscript } from "@/lib/order-extract";
+import { extractOrderFromTranscript as extractOrderWithAI } from "@/lib/orderExtraction";
 import { getPool, initDatabase } from "@/lib/db/connection";
 
 export const runtime = "nodejs";
@@ -318,53 +319,65 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Fallback: auto-extract order from transcript when structured output produced nothing
-        if (transcriptValue && !structuredOrder) {
+        // AI extraction: run when no structured output was produced
+        if (transcriptValue && transcriptValue.length >= 20 && !structuredOrder) {
           void (async () => {
             try {
-              const extracted = extractOrderFromTranscript(transcriptValue);
-              if (extracted.items.length === 0) {
-                console.log("[VAPI Webhook] end-of-call: no items from transcript fallback, skipping", callId);
-                return;
-              }
               const fallbackOrderId = callId;
               const existingFallback = await findOrderByOrderIdByOrganization(fallbackOrderId, org.id);
               if (existingFallback) {
-                console.log("[VAPI Webhook] end-of-call: order already exists, skipping transcript fallback", callId);
+                console.log("[VAPI Webhook] end-of-call: order already exists, skipping AI extraction", callId);
                 return;
               }
-              const fallbackItems = extracted.items.map((item) => ({
+
+              const aiExtracted = await extractOrderWithAI({ transcript: transcriptValue, languageHint: "sv" });
+
+              if (aiExtracted.items.length === 0) {
+                console.log("[VAPI Webhook] end-of-call: AI extraction found no items, skipping", callId);
+                return;
+              }
+
+              const fallbackItems = aiExtracted.items.map((item) => ({
                 name: item.name,
-                quantity: item.qty,
-                price: item.price,
+                quantity: item.quantity,
                 description: [
-                  item.size,
-                  item.glutenFree ? "gluten-free" : null,
-                  item.mozzarella ? "mozzarella" : null,
+                  ...item.modifications,
                   item.notes,
                 ].filter(Boolean).join(", ") || undefined,
               }));
+
               const fallbackOrder = await createOrder(
                 {
                   order: {
                     id: fallbackOrderId,
                     callId,
                     items: fallbackItems,
-                    fulfillmentType: extracted.fulfillment,
-                    totalAmount: extracted.estimatedTotal,
+                    fulfillmentType: aiExtracted.fulfillment !== "unknown" ? aiExtracted.fulfillment : undefined,
+                    customerAddress: aiExtracted.address || undefined,
                   },
                   confirmedAt: new Date().toISOString(),
                 },
                 { organizationId: org.id }
               );
+
               fallbackOrder.status = "pending_review";
               fallbackOrder.postProcessed = true;
-              fallbackOrder.fulfillmentType = (extracted.fulfillment as FulfillmentType) || undefined;
-              fallbackOrder.totalAmount = extracted.estimatedTotal ?? fallbackOrder.totalAmount;
+              fallbackOrder.fulfillmentType =
+                aiExtracted.fulfillment !== "unknown"
+                  ? (aiExtracted.fulfillment as FulfillmentType)
+                  : fallbackOrder.fulfillmentType;
+              fallbackOrder.extractedJson = aiExtracted;
+              fallbackOrder.overallConfidence = aiExtracted.overall_confidence;
+
               await updateOrder(fallbackOrder);
-              console.log("[VAPI Webhook] end-of-call: created pending_review order from transcript", fallbackOrder.id, "items:", fallbackItems.length);
+              console.log(
+                "[VAPI Webhook] end-of-call: created pending_review order via AI extraction",
+                fallbackOrder.id,
+                "items:", fallbackItems.length,
+                "confidence:", aiExtracted.overall_confidence
+              );
             } catch (err: any) {
-              console.error("[VAPI Webhook] end-of-call: transcript fallback error", err?.message || err);
+              console.error("[VAPI Webhook] end-of-call: AI extraction error", err?.message || err);
             }
           })();
         }
