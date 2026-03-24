@@ -11,7 +11,7 @@ export type ExtractedOrder = {
     price?: number;
     category?: string;
   }>;
-  fulfillment?: "pickup" | "delivery";
+  fulfillment?: "pickup" | "delivery" | "dine_in";
   requestedTime?: string; // keep raw; you can normalize later
   customerPhone?: string;
   address?: string;
@@ -37,13 +37,16 @@ function containsWord(haystack: string, needle: string) {
   return re.test(haystack);
 }
 
-function detectFulfillment(t: string): "pickup" | "delivery" | undefined {
+function detectFulfillment(t: string): "pickup" | "delivery" | "dine_in" | undefined {
   const s = norm(t);
   if (/(hemkörning|leverans|delivery|kör ut|till adress|hem till)/i.test(s)) {
     return "delivery";
   }
   if (/(avhämtning|hämtar|pickup|takeaway|take away|hämta)/i.test(s)) {
     return "pickup";
+  }
+  if (/(äta här|äter här|sitter här|dine.?in|eat.?in|sitta här|inne|bord\b)/i.test(s)) {
+    return "dine_in";
   }
   return undefined;
 }

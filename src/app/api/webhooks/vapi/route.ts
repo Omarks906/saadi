@@ -279,15 +279,23 @@ export async function POST(req: NextRequest) {
           existingCall = newCall;
         }
         
+        // Extract recording URLs and transcript from the artifact
+        const artifact = body.message?.artifact || report.artifact || {};
+        const recordingUrl = artifact.recordingUrl || null;
+        const stereoRecordingUrl = artifact.stereoRecordingUrl || null;
+        const customerRecordingUrl = artifact.recording?.mono?.customerUrl || null;
+        const assistantRecordingUrl = artifact.recording?.mono?.assistantUrl || null;
+        const transcriptValue = artifact.transcript || body.message?.transcript || report.transcript || null;
+
         // Now update it with end-of-call report data
         const response = await handleCallEnded(
           {
           ...body,
-          call: { 
+          call: {
             ...existingCall,
             ...report.call,
             ...body.message?.call,
-            id: callId 
+            id: callId
           },
           type: "call.ended",
           endedAt: report.endedAt || report.endTime || new Date().toISOString(),
@@ -295,6 +303,72 @@ export async function POST(req: NextRequest) {
           },
           org.id
         );
+
+        // Persist recording URLs and transcript on the call row
+        if (recordingUrl || stereoRecordingUrl || customerRecordingUrl || assistantRecordingUrl || transcriptValue) {
+          const callToUpdate = await findCallByCallIdByOrganization(callId, org.id);
+          if (callToUpdate) {
+            if (recordingUrl) callToUpdate.recordingUrl = recordingUrl;
+            if (stereoRecordingUrl) callToUpdate.stereoRecordingUrl = stereoRecordingUrl;
+            if (customerRecordingUrl) callToUpdate.customerRecordingUrl = customerRecordingUrl;
+            if (assistantRecordingUrl) callToUpdate.assistantRecordingUrl = assistantRecordingUrl;
+            if (transcriptValue) callToUpdate.transcript = transcriptValue;
+            await updateCall(callToUpdate);
+            console.log("[VAPI Webhook] end-of-call: Persisted recording/transcript for call", callId);
+          }
+        }
+
+        // Fallback: auto-extract order from transcript when structured output produced nothing
+        if (transcriptValue && !structuredOrder) {
+          void (async () => {
+            try {
+              const extracted = extractOrderFromTranscript(transcriptValue);
+              if (extracted.items.length === 0) {
+                console.log("[VAPI Webhook] end-of-call: no items from transcript fallback, skipping", callId);
+                return;
+              }
+              const fallbackOrderId = callId;
+              const existingFallback = await findOrderByOrderIdByOrganization(fallbackOrderId, org.id);
+              if (existingFallback) {
+                console.log("[VAPI Webhook] end-of-call: order already exists, skipping transcript fallback", callId);
+                return;
+              }
+              const fallbackItems = extracted.items.map((item) => ({
+                name: item.name,
+                quantity: item.qty,
+                price: item.price,
+                description: [
+                  item.size,
+                  item.glutenFree ? "gluten-free" : null,
+                  item.mozzarella ? "mozzarella" : null,
+                  item.notes,
+                ].filter(Boolean).join(", ") || undefined,
+              }));
+              const fallbackOrder = await createOrder(
+                {
+                  order: {
+                    id: fallbackOrderId,
+                    callId,
+                    items: fallbackItems,
+                    fulfillmentType: extracted.fulfillment,
+                    totalAmount: extracted.estimatedTotal,
+                  },
+                  confirmedAt: new Date().toISOString(),
+                },
+                { organizationId: org.id }
+              );
+              fallbackOrder.status = "pending_review";
+              fallbackOrder.postProcessed = true;
+              fallbackOrder.fulfillmentType = (extracted.fulfillment as FulfillmentType) || undefined;
+              fallbackOrder.totalAmount = extracted.estimatedTotal ?? fallbackOrder.totalAmount;
+              await updateOrder(fallbackOrder);
+              console.log("[VAPI Webhook] end-of-call: created pending_review order from transcript", fallbackOrder.id, "items:", fallbackItems.length);
+            } catch (err: any) {
+              console.error("[VAPI Webhook] end-of-call: transcript fallback error", err?.message || err);
+            }
+          })();
+        }
+
         void handleEndOfCall(
           {
             ...body,
