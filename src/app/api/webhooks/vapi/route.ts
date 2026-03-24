@@ -322,71 +322,81 @@ export async function POST(req: NextRequest) {
         // AI extraction: run when no structured output was produced
         if (transcriptValue && transcriptValue.length >= 20 && !structuredOrder) {
           void (async () => {
-            try {
-              const fallbackOrderId = callId;
-              const existingFallback = await findOrderByOrderIdByOrganization(fallbackOrderId, org.id);
-              if (existingFallback) {
-                console.log("[VAPI Webhook] end-of-call: order already exists, skipping AI extraction", callId);
-                return;
-              }
+            const fallbackOrderId = callId;
+            let finalOrder = await findOrderByOrderIdByOrganization(fallbackOrderId, org.id);
 
-              const aiExtracted = await extractOrderWithAI({ transcript: transcriptValue, languageHint: "sv" });
+            if (finalOrder) {
+              console.log("[VAPI Webhook] end-of-call: order already exists, skipping AI extraction", callId);
+            } else {
+              try {
+                const aiExtracted = await extractOrderWithAI({ transcript: transcriptValue, languageHint: "sv" });
 
-              if (aiExtracted.items.length === 0) {
-                console.log("[VAPI Webhook] end-of-call: AI extraction found no items, skipping", callId);
-                return;
-              }
+                if (aiExtracted.items.length === 0) {
+                  console.log("[VAPI Webhook] end-of-call: AI extraction found no items, skipping", callId);
+                  return;
+                }
 
-              const fallbackItems = aiExtracted.items.map((item) => ({
-                name: item.name,
-                quantity: item.quantity,
-                description: [
-                  ...item.modifications,
-                  item.notes,
-                ].filter(Boolean).join(", ") || undefined,
-              }));
+                const fallbackItems = aiExtracted.items.map((item) => ({
+                  name: item.name,
+                  quantity: item.quantity,
+                  description: [
+                    ...item.modifications,
+                    item.notes,
+                  ].filter(Boolean).join(", ") || undefined,
+                }));
 
-              const fallbackOrder = await createOrder(
-                {
-                  order: {
-                    id: fallbackOrderId,
-                    callId,
-                    items: fallbackItems,
-                    fulfillmentType: aiExtracted.fulfillment !== "unknown" ? aiExtracted.fulfillment : undefined,
-                    customerAddress: aiExtracted.address || undefined,
+                const created = await createOrder(
+                  {
+                    order: {
+                      id: fallbackOrderId,
+                      callId,
+                      items: fallbackItems,
+                      fulfillmentType: aiExtracted.fulfillment !== "unknown" ? aiExtracted.fulfillment : undefined,
+                      customerAddress: aiExtracted.address || undefined,
+                    },
+                    confirmedAt: new Date().toISOString(),
                   },
-                  confirmedAt: new Date().toISOString(),
-                },
-                { organizationId: org.id }
-              );
+                  { organizationId: org.id }
+                );
 
-              fallbackOrder.status = "pending_review";
-              fallbackOrder.postProcessed = true;
-              fallbackOrder.fulfillmentType =
-                aiExtracted.fulfillment !== "unknown"
-                  ? (aiExtracted.fulfillment as FulfillmentType)
-                  : fallbackOrder.fulfillmentType;
-              fallbackOrder.extractedJson = aiExtracted;
-              fallbackOrder.overallConfidence = aiExtracted.overall_confidence;
-              fallbackOrder.extractionModel = "gpt-5.2";
-              fallbackOrder.extractionVersion = 1;
+                created.status = "pending_review";
+                created.postProcessed = true;
+                created.fulfillmentType =
+                  aiExtracted.fulfillment !== "unknown"
+                    ? (aiExtracted.fulfillment as FulfillmentType)
+                    : created.fulfillmentType;
+                created.extractedJson = aiExtracted;
+                created.overallConfidence = aiExtracted.overall_confidence;
+                created.extractionModel = "gpt-5.2";
+                created.extractionVersion = 1;
 
-              await updateOrder(fallbackOrder);
-              console.log(
-                "[VAPI Webhook] end-of-call: created pending_review order via AI extraction",
-                fallbackOrder.id,
-                "items:", fallbackItems.length,
-                "confidence:", aiExtracted.overall_confidence
-              );
+                await updateOrder(created);
+                console.log(
+                  "[VAPI Webhook] end-of-call: created pending_review order via AI extraction",
+                  created.id,
+                  "items:", fallbackItems.length,
+                  "confidence:", aiExtracted.overall_confidence
+                );
 
-              void runPrintPipeline(fallbackOrder, { organizationId: org.id }).catch((printErr: any) => {
+                finalOrder = created;
+              } catch (err: any) {
+                console.error("[VAPI Webhook] end-of-call: AI extraction error", err?.message || err);
+                // Failure fallback: load whatever row was persisted before the error
+                try {
+                  finalOrder = await findOrderByOrderIdByOrganization(fallbackOrderId, org.id);
+                } catch {
+                  // ignore — nothing to print
+                }
+              }
+            }
+
+            if (finalOrder) {
+              void runPrintPipeline(finalOrder, { organizationId: org.id }).catch((printErr: any) => {
                 console.error(
                   "[VAPI Webhook] end-of-call: print pipeline error (non-fatal)",
                   printErr?.message || printErr
                 );
               });
-            } catch (err: any) {
-              console.error("[VAPI Webhook] end-of-call: AI extraction error", err?.message || err);
             }
           })();
         }
