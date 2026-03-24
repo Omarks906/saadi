@@ -790,6 +790,7 @@ export async function getOrderStatsByOrganization(
     return {
       total: 0,
       byStatus: {
+        pending_review: 0,
         confirmed: 0,
         preparing: 0,
         ready: 0,
