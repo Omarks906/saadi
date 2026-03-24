@@ -183,7 +183,12 @@ function buildTicketOrder(order: Order): TicketOrder {
     order.customerName;
   const customerName = looksLikePhone(rawName) ? undefined : rawName;
 
+  const needsReview =
+    (order.overallConfidence != null && order.overallConfidence < 85) ||
+    order.extractedJson?.needs_review === true;
+
   return {
+    reviewWarning: needsReview || undefined,
     restaurantName: metadata.restaurantName || eventRestaurant?.name || metadata.businessName,
     restaurantPhone: metadata.restaurantPhone || eventRestaurant?.phone || metadata.phone,
     orderNumber: order.orderId,

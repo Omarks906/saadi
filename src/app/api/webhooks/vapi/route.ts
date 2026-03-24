@@ -378,6 +378,13 @@ export async function POST(req: NextRequest) {
                 "items:", fallbackItems.length,
                 "confidence:", aiExtracted.overall_confidence
               );
+
+              void runPrintPipeline(fallbackOrder, { organizationId: org.id }).catch((printErr: any) => {
+                console.error(
+                  "[VAPI Webhook] end-of-call: print pipeline error (non-fatal)",
+                  printErr?.message || printErr
+                );
+              });
             } catch (err: any) {
               console.error("[VAPI Webhook] end-of-call: AI extraction error", err?.message || err);
             }

@@ -29,6 +29,8 @@ export type TicketOrder = {
   customer?: TicketCustomer;
   totalAmount?: number;
   currency?: string;
+  /** Prepend a review-warning banner on the ticket */
+  reviewWarning?: boolean;
 };
 
 const MAX_LINE_LENGTH = 48;
@@ -120,6 +122,13 @@ function formatTwoColumnLine(left: string, right: string): string {
 export function renderTicket(order: TicketOrder): string {
   const lines: string[] = [];
   const divider = "-".repeat(MAX_LINE_LENGTH);
+
+  // --- REVIEW WARNING (prepended when confidence is low or AI flagged it) ---
+  if (order.reviewWarning) {
+    lines.push("*".repeat(MAX_LINE_LENGTH));
+    lines.push("!! OSÄKERT – KOLLA ORDER");
+    lines.push("*".repeat(MAX_LINE_LENGTH));
+  }
 
   // --- ITEMS (top — kitchen reads this first) ---
   if (order.items && order.items.length > 0) {
