@@ -17,6 +17,11 @@ CREATE TABLE IF NOT EXISTS calls (
   confidence DECIMAL(5, 4),
   phone_number VARCHAR(50),
   customer_id VARCHAR(255),
+  recording_url TEXT,
+  stereo_recording_url TEXT,
+  customer_recording_url TEXT,
+  assistant_recording_url TEXT,
+  transcript TEXT,
   metadata JSONB,
   raw_event JSONB,
   CONSTRAINT valid_business_type CHECK (business_type IN ('restaurant', 'car', 'router', 'other') OR business_type IS NULL)
@@ -197,4 +202,11 @@ CREATE INDEX IF NOT EXISTS idx_orders_org_order_id ON orders(organization_id, or
 CREATE INDEX IF NOT EXISTS idx_print_jobs_org_created_at ON print_jobs(organization_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_org_status_created_at ON print_jobs(organization_id, status, created_at);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_status_created_at ON print_jobs(status, created_at DESC);
+
+-- Recording and transcript fields on calls (added 2026-03-24)
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS recording_url TEXT;
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS stereo_recording_url TEXT;
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS customer_recording_url TEXT;
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS assistant_recording_url TEXT;
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS transcript TEXT;
 

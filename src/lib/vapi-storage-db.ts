@@ -20,6 +20,11 @@ export type Call = {
   confidence?: number;
   phoneNumber?: string;
   customerId?: string;
+  recordingUrl?: string;
+  stereoRecordingUrl?: string;
+  customerRecordingUrl?: string;
+  assistantRecordingUrl?: string;
+  transcript?: string;
   metadata?: Record<string, any>;
   rawEvent?: any;
 };
@@ -119,6 +124,11 @@ function rowToCall(row: any): Call {
     confidence: row.confidence != null ? parseFloat(row.confidence) : undefined,
     phoneNumber: row.phone_number || undefined,
     customerId: row.customer_id || undefined,
+    recordingUrl: row.recording_url || undefined,
+    stereoRecordingUrl: row.stereo_recording_url || undefined,
+    customerRecordingUrl: row.customer_recording_url || undefined,
+    assistantRecordingUrl: row.assistant_recording_url || undefined,
+    transcript: row.transcript || undefined,
     metadata: row.metadata || undefined,
     rawEvent: row.raw_event || undefined,
   };
@@ -144,6 +154,11 @@ function callToRow(call: Call): any {
     confidence: call.confidence != null ? call.confidence : null,
     phone_number: call.phoneNumber || null,
     customer_id: call.customerId || null,
+    recording_url: call.recordingUrl || null,
+    stereo_recording_url: call.stereoRecordingUrl || null,
+    customer_recording_url: call.customerRecordingUrl || null,
+    assistant_recording_url: call.assistantRecordingUrl || null,
+    transcript: call.transcript || null,
     metadata: call.metadata || null,
     raw_event: call.rawEvent || null,
   };
@@ -247,8 +262,10 @@ export async function createCall(
       id, call_id, tenant_id, organization_id,
       created_at, started_at, ended_at, duration_seconds,
       status, business_type, scores, detected_from, confidence,
-      phone_number, customer_id, metadata, raw_event
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+      phone_number, customer_id,
+      recording_url, stereo_recording_url, customer_recording_url, assistant_recording_url, transcript,
+      metadata, raw_event
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
     [
       row.id, row.call_id, row.tenant_id, row.organization_id,
       row.created_at, row.started_at, row.ended_at, row.duration_seconds,
@@ -256,6 +273,7 @@ export async function createCall(
       row.scores ? JSON.stringify(row.scores) : null,
       row.detected_from, row.confidence,
       row.phone_number, row.customer_id,
+      row.recording_url, row.stereo_recording_url, row.customer_recording_url, row.assistant_recording_url, row.transcript,
       row.metadata ? JSON.stringify(row.metadata) : null,
       row.raw_event ? JSON.stringify(row.raw_event) : null,
     ]
@@ -313,14 +331,17 @@ export async function updateCall(call: Call): Promise<void> {
     `UPDATE calls SET
       call_id = $2, started_at = $3, ended_at = $4, duration_seconds = $5,
       status = $6, business_type = $7, scores = $8, detected_from = $9, confidence = $10,
-      phone_number = $11, customer_id = $12, metadata = $13, raw_event = $14
-    WHERE id = $1 AND organization_id = $15`,
+      phone_number = $11, customer_id = $12,
+      recording_url = $13, stereo_recording_url = $14, customer_recording_url = $15, assistant_recording_url = $16, transcript = $17,
+      metadata = $18, raw_event = $19
+    WHERE id = $1 AND organization_id = $20`,
     [
       row.id, row.call_id, row.started_at, row.ended_at, row.duration_seconds,
       row.status, row.business_type,
       row.scores ? JSON.stringify(row.scores) : null,
       row.detected_from, row.confidence,
       row.phone_number, row.customer_id,
+      row.recording_url, row.stereo_recording_url, row.customer_recording_url, row.assistant_recording_url, row.transcript,
       row.metadata ? JSON.stringify(row.metadata) : null,
       row.raw_event ? JSON.stringify(row.raw_event) : null,
       row.organization_id,

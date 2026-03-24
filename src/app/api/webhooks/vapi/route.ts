@@ -279,15 +279,23 @@ export async function POST(req: NextRequest) {
           existingCall = newCall;
         }
         
+        // Extract recording URLs and transcript from the artifact
+        const artifact = body.message?.artifact || report.artifact || {};
+        const recordingUrl = artifact.recordingUrl || null;
+        const stereoRecordingUrl = artifact.stereoRecordingUrl || null;
+        const customerRecordingUrl = artifact.recording?.mono?.customerUrl || null;
+        const assistantRecordingUrl = artifact.recording?.mono?.assistantUrl || null;
+        const transcriptValue = artifact.transcript || body.message?.transcript || report.transcript || null;
+
         // Now update it with end-of-call report data
         const response = await handleCallEnded(
           {
           ...body,
-          call: { 
+          call: {
             ...existingCall,
             ...report.call,
             ...body.message?.call,
-            id: callId 
+            id: callId
           },
           type: "call.ended",
           endedAt: report.endedAt || report.endTime || new Date().toISOString(),
@@ -295,6 +303,21 @@ export async function POST(req: NextRequest) {
           },
           org.id
         );
+
+        // Persist recording URLs and transcript on the call row
+        if (recordingUrl || stereoRecordingUrl || customerRecordingUrl || assistantRecordingUrl || transcriptValue) {
+          const callToUpdate = await findCallByCallIdByOrganization(callId, org.id);
+          if (callToUpdate) {
+            if (recordingUrl) callToUpdate.recordingUrl = recordingUrl;
+            if (stereoRecordingUrl) callToUpdate.stereoRecordingUrl = stereoRecordingUrl;
+            if (customerRecordingUrl) callToUpdate.customerRecordingUrl = customerRecordingUrl;
+            if (assistantRecordingUrl) callToUpdate.assistantRecordingUrl = assistantRecordingUrl;
+            if (transcriptValue) callToUpdate.transcript = transcriptValue;
+            await updateCall(callToUpdate);
+            console.log("[VAPI Webhook] end-of-call: Persisted recording/transcript for call", callId);
+          }
+        }
+
         void handleEndOfCall(
           {
             ...body,
