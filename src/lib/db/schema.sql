@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS orders (
   items JSONB,
   total_amount DECIMAL(10, 2),
   currency VARCHAR(10),
+  post_processed BOOLEAN NOT NULL DEFAULT false,
   metadata JSONB,
   raw_event JSONB,
   CONSTRAINT valid_business_type CHECK (business_type IN ('restaurant', 'car', 'router', 'other') OR business_type IS NULL)
@@ -202,6 +203,9 @@ CREATE INDEX IF NOT EXISTS idx_orders_org_order_id ON orders(organization_id, or
 CREATE INDEX IF NOT EXISTS idx_print_jobs_org_created_at ON print_jobs(organization_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_org_status_created_at ON print_jobs(organization_id, status, created_at);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_status_created_at ON print_jobs(status, created_at DESC);
+
+-- post_processed flag on orders (added 2026-03-24)
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS post_processed BOOLEAN NOT NULL DEFAULT false;
 
 -- Recording and transcript fields on calls (added 2026-03-24)
 ALTER TABLE calls ADD COLUMN IF NOT EXISTS recording_url TEXT;

@@ -67,6 +67,7 @@ export type Order = {
   }>;
   totalAmount?: number;
   currency?: string;
+  postProcessed?: boolean;
   metadata?: Record<string, any>;
   rawEvent?: any;
 };
@@ -189,6 +190,7 @@ function rowToOrder(row: any): Order {
     items: row.items || undefined,
     totalAmount: row.total_amount ? parseFloat(row.total_amount) : undefined,
     currency: row.currency || undefined,
+    postProcessed: row.post_processed ?? false,
     metadata: row.metadata || undefined,
     rawEvent: row.raw_event || undefined,
   };
@@ -218,6 +220,7 @@ function orderToRow(order: Order): any {
     items: order.items || null,
     total_amount: order.totalAmount || null,
     currency: order.currency || null,
+    post_processed: order.postProcessed ?? false,
     metadata: order.metadata || null,
     raw_event: order.rawEvent || null,
   };
@@ -469,8 +472,8 @@ export async function createOrder(
       created_at, confirmed_at, status,
       business_type, customer_id, customer_name, customer_phone, customer_address,
       scheduled_for, special_instructions, allergies,
-      items, total_amount, currency, metadata, raw_event
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)`,
+      items, total_amount, currency, post_processed, metadata, raw_event
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)`,
     [
       row.id, row.order_id, row.call_id, row.tenant_id, row.organization_id,
       row.created_at, row.confirmed_at, row.status,
@@ -478,7 +481,7 @@ export async function createOrder(
       row.customer_name, row.customer_phone, row.customer_address,
       row.scheduled_for, row.special_instructions, row.allergies,
       row.items ? JSON.stringify(row.items) : null,
-      row.total_amount, row.currency,
+      row.total_amount, row.currency, row.post_processed,
       row.metadata ? JSON.stringify(row.metadata) : null,
       row.raw_event ? JSON.stringify(row.raw_event) : null,
     ]
@@ -522,8 +525,8 @@ export async function updateOrder(order: Order): Promise<void> {
       business_type = $6, customer_id = $7, customer_name = $8, customer_phone = $9,
       customer_address = $10, scheduled_for = $11, special_instructions = $12,
       allergies = $13, items = $14, total_amount = $15, currency = $16,
-      metadata = $17, raw_event = $18
-    WHERE id = $1 AND organization_id = $19`,
+      post_processed = $17, metadata = $18, raw_event = $19
+    WHERE id = $1 AND organization_id = $20`,
     [
       row.id, row.order_id, row.call_id, row.confirmed_at, row.status,
       row.business_type, row.customer_id,
@@ -531,7 +534,7 @@ export async function updateOrder(order: Order): Promise<void> {
       row.customer_address, row.scheduled_for, row.special_instructions,
       row.allergies,
       row.items ? JSON.stringify(row.items) : null,
-      row.total_amount, row.currency,
+      row.total_amount, row.currency, row.post_processed,
       row.metadata ? JSON.stringify(row.metadata) : null,
       row.raw_event ? JSON.stringify(row.raw_event) : null,
       row.organization_id,
