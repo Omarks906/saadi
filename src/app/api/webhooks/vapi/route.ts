@@ -368,6 +368,8 @@ export async function POST(req: NextRequest) {
                   : fallbackOrder.fulfillmentType;
               fallbackOrder.extractedJson = aiExtracted;
               fallbackOrder.overallConfidence = aiExtracted.overall_confidence;
+              fallbackOrder.extractionModel = "gpt-5.2";
+              fallbackOrder.extractionVersion = 1;
 
               await updateOrder(fallbackOrder);
               console.log(

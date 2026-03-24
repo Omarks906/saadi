@@ -71,6 +71,8 @@ export type Order = {
   postProcessed?: boolean;
   extractedJson?: any;
   overallConfidence?: number;
+  extractionModel?: string;
+  extractionVersion?: number;
   metadata?: Record<string, any>;
   rawEvent?: any;
 };
@@ -196,6 +198,8 @@ function rowToOrder(row: any): Order {
     postProcessed: row.post_processed ?? false,
     extractedJson: row.extracted_json || undefined,
     overallConfidence: row.overall_confidence != null ? parseInt(row.overall_confidence, 10) : undefined,
+    extractionModel: row.extraction_model || undefined,
+    extractionVersion: row.extraction_version != null ? parseInt(row.extraction_version, 10) : undefined,
     metadata: row.metadata || undefined,
     rawEvent: row.raw_event || undefined,
   };
@@ -228,6 +232,8 @@ function orderToRow(order: Order): any {
     post_processed: order.postProcessed ?? false,
     extracted_json: order.extractedJson || null,
     overall_confidence: order.overallConfidence ?? null,
+    extraction_model: order.extractionModel || null,
+    extraction_version: order.extractionVersion ?? null,
     metadata: order.metadata || null,
     raw_event: order.rawEvent || null,
   };
@@ -480,8 +486,8 @@ export async function createOrder(
       business_type, customer_id, customer_name, customer_phone, customer_address,
       scheduled_for, special_instructions, allergies,
       items, total_amount, currency, post_processed, metadata, raw_event,
-      extracted_json, overall_confidence
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)`,
+      extracted_json, overall_confidence, extraction_model, extraction_version
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)`,
     [
       row.id, row.order_id, row.call_id, row.tenant_id, row.organization_id,
       row.created_at, row.confirmed_at, row.status,
@@ -494,6 +500,8 @@ export async function createOrder(
       row.raw_event ? JSON.stringify(row.raw_event) : null,
       row.extracted_json ? JSON.stringify(row.extracted_json) : null,
       row.overall_confidence ?? null,
+      row.extraction_model ?? null,
+      row.extraction_version ?? null,
     ]
   );
   
@@ -536,8 +544,9 @@ export async function updateOrder(order: Order): Promise<void> {
       customer_address = $10, scheduled_for = $11, special_instructions = $12,
       allergies = $13, items = $14, total_amount = $15, currency = $16,
       post_processed = $17, metadata = $18, raw_event = $19,
-      extracted_json = $20, overall_confidence = $21
-    WHERE id = $1 AND organization_id = $22`,
+      extracted_json = $20, overall_confidence = $21,
+      extraction_model = $22, extraction_version = $23
+    WHERE id = $1 AND organization_id = $24`,
     [
       row.id, row.order_id, row.call_id, row.confirmed_at, row.status,
       row.business_type, row.customer_id,
@@ -550,6 +559,8 @@ export async function updateOrder(order: Order): Promise<void> {
       row.raw_event ? JSON.stringify(row.raw_event) : null,
       row.extracted_json ? JSON.stringify(row.extracted_json) : null,
       row.overall_confidence ?? null,
+      row.extraction_model ?? null,
+      row.extraction_version ?? null,
       row.organization_id,
     ]
   );
