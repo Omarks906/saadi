@@ -31,12 +31,13 @@ export type Call = {
 
 // Order status types - expanded for kitchen workflow
 export type OrderStatus =
-  | "confirmed"    // Order received
-  | "preparing"    // Kitchen is preparing
-  | "ready"        // Ready for pickup/delivery
+  | "pending_review"   // Auto-extracted, awaiting staff confirmation
+  | "confirmed"        // Order received / confirmed by staff
+  | "preparing"        // Kitchen is preparing
+  | "ready"            // Ready for pickup/delivery
   | "out_for_delivery" // On the way (delivery only)
-  | "completed"    // Delivered/picked up
-  | "cancelled";   // Order cancelled
+  | "completed"        // Delivered/picked up
+  | "cancelled";       // Order cancelled
 
 // Fulfillment type - how the order will be fulfilled
 export type FulfillmentType = "delivery" | "pickup" | "dine_in";
@@ -752,6 +753,7 @@ export async function getOrderStatsByOrganization(
     );
 
     const byStatus: Record<OrderStatus, number> = {
+      pending_review: 0,
       confirmed: 0,
       preparing: 0,
       ready: 0,

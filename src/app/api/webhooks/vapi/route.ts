@@ -318,6 +318,57 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        // Fallback: auto-extract order from transcript when structured output produced nothing
+        if (transcriptValue && !structuredOrder) {
+          void (async () => {
+            try {
+              const extracted = extractOrderFromTranscript(transcriptValue);
+              if (extracted.items.length === 0) {
+                console.log("[VAPI Webhook] end-of-call: no items from transcript fallback, skipping", callId);
+                return;
+              }
+              const fallbackOrderId = callId;
+              const existingFallback = await findOrderByOrderIdByOrganization(fallbackOrderId, org.id);
+              if (existingFallback) {
+                console.log("[VAPI Webhook] end-of-call: order already exists, skipping transcript fallback", callId);
+                return;
+              }
+              const fallbackItems = extracted.items.map((item) => ({
+                name: item.name,
+                quantity: item.qty,
+                price: item.price,
+                description: [
+                  item.size,
+                  item.glutenFree ? "gluten-free" : null,
+                  item.mozzarella ? "mozzarella" : null,
+                  item.notes,
+                ].filter(Boolean).join(", ") || undefined,
+              }));
+              const fallbackOrder = await createOrder(
+                {
+                  order: {
+                    id: fallbackOrderId,
+                    callId,
+                    items: fallbackItems,
+                    fulfillmentType: extracted.fulfillment,
+                    totalAmount: extracted.estimatedTotal,
+                  },
+                  confirmedAt: new Date().toISOString(),
+                },
+                { organizationId: org.id }
+              );
+              fallbackOrder.status = "pending_review";
+              fallbackOrder.postProcessed = true;
+              fallbackOrder.fulfillmentType = (extracted.fulfillment as FulfillmentType) || undefined;
+              fallbackOrder.totalAmount = extracted.estimatedTotal ?? fallbackOrder.totalAmount;
+              await updateOrder(fallbackOrder);
+              console.log("[VAPI Webhook] end-of-call: created pending_review order from transcript", fallbackOrder.id, "items:", fallbackItems.length);
+            } catch (err: any) {
+              console.error("[VAPI Webhook] end-of-call: transcript fallback error", err?.message || err);
+            }
+          })();
+        }
+
         void handleEndOfCall(
           {
             ...body,
