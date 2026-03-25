@@ -386,9 +386,10 @@ export async function POST(req: NextRequest) {
                   const maxBytes = Number(process.env.REVIEW_AUDIO_MAX_BYTES || String(25 * 1024 * 1024));
                   const threshold = Number(process.env.REVIEW_AUTO_PRINT_THRESHOLD || "85");
 
+                  // For transcription accuracy, prefer customer-only mono first.
                   const candidates = [
-                    recordingUrl,
                     customerRecordingUrl,
+                    recordingUrl,
                     stereoRecordingUrl,
                     assistantRecordingUrl,
                   ].filter(Boolean) as string[];
@@ -406,6 +407,7 @@ export async function POST(req: NextRequest) {
                         maxBytes,
                         language: "sv",
                         timeoutMs: 25_000,
+                        prompt: process.env.OPENAI_TRANSCRIBE_PROMPT || undefined,
                       });
                       audioTranscript = transcript;
                       break;
