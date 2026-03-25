@@ -444,11 +444,54 @@ export async function POST(req: NextRequest) {
 
                   // Also update order fields used for printing
                   const final = review.final_extraction_json;
-                  const finalItems = (final?.items || []).map((item: any) => ({
-                    name: item.name,
-                    quantity: item.quantity,
-                    description: [...(item.modifications || []), item.notes].filter(Boolean).join(", ") || undefined,
-                  }));
+
+                  // Heuristic guard: prevent garbage / instruction-like strings from being printed as items.
+                  const looksLikeGarbageItemName = (name: string) => {
+                    const n = (name || "").trim().toLowerCase();
+                    if (!n) return true;
+                    // Common instruction/assistant words we never want as items
+                    if (
+                      /(jag\s+lyssnar|fortsätt|jag\s+väntar|tack|adjö|hej\s+då|redo|beställ|skär|skära|slice)/i.test(
+                        n
+                      )
+                    ) {
+                      return true;
+                    }
+                    // Extremely long single-token strings are often hallucinations
+                    if (!n.includes(" ") && n.length >= 18) return true;
+                    // Lots of non-letters tends to be noise
+                    const letters = (n.match(/[a-zåäö]/gi) || []).length;
+                    if (letters < Math.min(4, n.length)) return true;
+                    return false;
+                  };
+
+                  const removed: string[] = [];
+                  const finalItems = (final?.items || [])
+                    .map((item: any) => ({
+                      name: item.name,
+                      quantity: item.quantity,
+                      description:
+                        [...(item.modifications || []), item.notes]
+                          .filter(Boolean)
+                          .join(", ") || undefined,
+                    }))
+                    .filter((it: any) => {
+                      if (looksLikeGarbageItemName(it.name)) {
+                        removed.push(`${it.quantity || 1}× ${it.name}`);
+                        return false;
+                      }
+                      return true;
+                    });
+
+                  if (removed.length) {
+                    const note = `Unclear phrase(s) ignored as items: ${removed.join("; ")}`;
+                    fallbackOrder.specialInstructions = [fallbackOrder.specialInstructions, note]
+                      .filter(Boolean)
+                      .join(" | ");
+                    // If we had to remove garbage, force human review
+                    fallbackOrder.needsHumanReview = true;
+                  }
+
                   if (finalItems.length) {
                     fallbackOrder.items = finalItems;
                   }
@@ -460,7 +503,7 @@ export async function POST(req: NextRequest) {
                   }
 
                   // Decide if we can auto-print
-                  const okToAutoPrint = !review.needs_human_review && review.overall_confidence >= threshold;
+                  const okToAutoPrint = !review.needs_human_review && !removed.length && review.overall_confidence >= threshold;
                   fallbackOrder.status = okToAutoPrint ? "confirmed" : "pending_review";
 
                   await updateOrder(fallbackOrder);
