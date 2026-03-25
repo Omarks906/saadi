@@ -71,6 +71,17 @@ export type Order = {
   postProcessed?: boolean;
   extractedJson?: any;
   overallConfidence?: number;
+
+  // Review pipeline (post-call)
+  reviewTranscript?: string;
+  reviewJson?: any;
+  reviewChanges?: any;
+  reviewNotes?: string;
+  reviewConfidence?: number;
+  needsHumanReview?: boolean;
+  finalExtractedJson?: any;
+  reviewedAt?: string;
+
   metadata?: Record<string, any>;
   rawEvent?: any;
 };
@@ -194,8 +205,21 @@ function rowToOrder(row: any): Order {
     totalAmount: row.total_amount ? parseFloat(row.total_amount) : undefined,
     currency: row.currency || undefined,
     postProcessed: row.post_processed ?? false,
+
     extractedJson: row.extracted_json || undefined,
-    overallConfidence: row.overall_confidence != null ? parseInt(row.overall_confidence, 10) : undefined,
+    overallConfidence:
+      row.overall_confidence != null ? parseInt(row.overall_confidence, 10) : undefined,
+
+    reviewTranscript: row.review_transcript || undefined,
+    reviewJson: row.review_json || undefined,
+    reviewChanges: row.review_changes || undefined,
+    reviewNotes: row.review_notes || undefined,
+    reviewConfidence:
+      row.review_confidence != null ? parseInt(row.review_confidence, 10) : undefined,
+    needsHumanReview: row.needs_human_review ?? undefined,
+    finalExtractedJson: row.final_extracted_json || undefined,
+    reviewedAt: row.reviewed_at || undefined,
+
     metadata: row.metadata || undefined,
     rawEvent: row.raw_event || undefined,
   };
@@ -228,6 +252,16 @@ function orderToRow(order: Order): any {
     post_processed: order.postProcessed ?? false,
     extracted_json: order.extractedJson || null,
     overall_confidence: order.overallConfidence ?? null,
+
+    review_transcript: order.reviewTranscript || null,
+    review_json: order.reviewJson || null,
+    review_changes: order.reviewChanges || null,
+    review_notes: order.reviewNotes || null,
+    review_confidence: order.reviewConfidence ?? null,
+    needs_human_review: order.needsHumanReview ?? null,
+    final_extracted_json: order.finalExtractedJson || null,
+    reviewed_at: order.reviewedAt || null,
+
     metadata: order.metadata || null,
     raw_event: order.rawEvent || null,
   };
@@ -536,8 +570,16 @@ export async function updateOrder(order: Order): Promise<void> {
       customer_address = $10, scheduled_for = $11, special_instructions = $12,
       allergies = $13, items = $14, total_amount = $15, currency = $16,
       post_processed = $17, metadata = $18, raw_event = $19,
-      extracted_json = $20, overall_confidence = $21
-    WHERE id = $1 AND organization_id = $22`,
+      extracted_json = $20, overall_confidence = $21,
+      review_transcript = $22,
+      review_json = $23,
+      review_changes = $24,
+      review_notes = $25,
+      review_confidence = $26,
+      needs_human_review = $27,
+      final_extracted_json = $28,
+      reviewed_at = $29
+    WHERE id = $1 AND organization_id = $30`,
     [
       row.id, row.order_id, row.call_id, row.confirmed_at, row.status,
       row.business_type, row.customer_id,
@@ -550,6 +592,14 @@ export async function updateOrder(order: Order): Promise<void> {
       row.raw_event ? JSON.stringify(row.raw_event) : null,
       row.extracted_json ? JSON.stringify(row.extracted_json) : null,
       row.overall_confidence ?? null,
+      row.review_transcript || null,
+      row.review_json ? JSON.stringify(row.review_json) : null,
+      row.review_changes ? JSON.stringify(row.review_changes) : null,
+      row.review_notes || null,
+      row.review_confidence ?? null,
+      row.needs_human_review ?? null,
+      row.final_extracted_json ? JSON.stringify(row.final_extracted_json) : null,
+      row.reviewed_at || null,
       row.organization_id,
     ]
   );

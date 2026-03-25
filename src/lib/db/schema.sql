@@ -219,3 +219,17 @@ ALTER TABLE calls ADD COLUMN IF NOT EXISTS customer_recording_url TEXT;
 ALTER TABLE calls ADD COLUMN IF NOT EXISTS assistant_recording_url TEXT;
 ALTER TABLE calls ADD COLUMN IF NOT EXISTS transcript TEXT;
 
+-- AI extraction fields on orders (added 2026-03-24)
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS extracted_json JSONB;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS overall_confidence INTEGER;
+
+-- Review pipeline fields on orders (added 2026-03-25)
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS review_transcript TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS review_json JSONB;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS review_changes JSONB;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS review_notes TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS review_confidence INTEGER;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS needs_human_review BOOLEAN;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS final_extracted_json JSONB;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
+

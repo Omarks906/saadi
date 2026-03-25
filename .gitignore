@@ -26,6 +26,9 @@
 
 # debug
 npm-debug.log*
+
+# local npm cache (used in OpenClaw env)
+.npm-cache/
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
