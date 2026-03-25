@@ -15,6 +15,8 @@ export type TranscribeOptions = {
   timeoutMs?: number;
   /** Force language if known (e.g. 'sv'). */
   language?: string;
+  /** Optional vocabulary/context prompt to improve recognition (Whisper supports this). */
+  prompt?: string;
 };
 
 async function headContentLength(url: string, timeoutMs: number): Promise<number | null> {
@@ -80,11 +82,14 @@ export async function transcribeAudioUrl(url: string, opts: TranscribeOptions = 
   // Prefer newer transcription models when available; fall back safely.
   const model = process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-mini-transcribe";
 
-  const res = await client.audio.transcriptions.create({
+  const req: any = {
     model,
     file,
     language: opts.language,
-  });
+  };
+  if (opts.prompt) req.prompt = opts.prompt;
+
+  const res = await client.audio.transcriptions.create(req);
 
   // SDK returns { text } (typings vary by version)
   const text: string | undefined = (res as any).text;
