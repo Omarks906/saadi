@@ -81,6 +81,13 @@ You receive:
 - an audio-based transcript (re-transcribed from the recording)
 - an initial extracted order JSON
 
+CRITICAL ANTI-HALLUCINATION RULES:
+- NEVER turn toppings into separate items
+- "Pizza X med Y" = ONE item (X with Y as modification), not TWO items
+- If transcript says "Chili special med pepperoni", output ONE "Chili special" item with pepperoni as modification
+- Validate: item count in output should match item mentions in transcript
+- If initial extraction split toppings incorrectly, fix it by merging back into base items
+
 Your job:
 - Correct the extracted order based on evidence in the transcripts.
 - Prefer the audio-based transcript if they conflict.

@@ -492,6 +492,25 @@ export async function POST(req: NextRequest) {
                     fallbackOrder.needsHumanReview = true;
                   }
 
+                  // Additional hallucination check: item count vs transcript mentions
+                  const transcriptLower = (transcriptValue || "").toLowerCase();
+                  const itemMentions = [
+                    ...transcriptLower.matchAll(/\b(?:pizza|calzone|sallad|pasta|hamburgare|kebab|gyros|falafel)\b/g),
+                    ...transcriptLower.matchAll(/\b(?:hawaii|vesuvio|margherita|bolognese|capricciosa|pepperoni|salami)\b/g),
+                    ...transcriptLower.matchAll(/\b(?:en|ett)\s+\w+/g),
+                  ].length;
+
+                  if (finalItems.length > itemMentions + 1) {
+                    // Likely hallucination: more extracted items than mentioned in transcript
+                    fallbackOrder.specialInstructions = [
+                      fallbackOrder.specialInstructions,
+                      `Warning: Extracted ${finalItems.length} items but transcript suggests ${itemMentions}. Check for toppings split into separate items.`,
+                    ]
+                      .filter(Boolean)
+                      .join(" | ");
+                    fallbackOrder.needsHumanReview = true;
+                  }
+
                   if (finalItems.length) {
                     fallbackOrder.items = finalItems;
                   }
