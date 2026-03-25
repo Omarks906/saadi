@@ -17,6 +17,8 @@ import { runPrintPipeline } from "@/lib/printing/print-pipeline";
 import { resolveOrgContextForWebhook, UnresolvableOrgError } from "@/lib/org-context";
 import { extractOrderFromTranscript } from "@/lib/order-extract";
 import { extractOrderFromTranscript as extractOrderWithAI } from "@/lib/orderExtraction";
+import { transcribeAudioUrl } from "@/lib/review/transcribe";
+import { reviewExtractedOrder } from "@/lib/review/order-review";
 import { getPool, initDatabase } from "@/lib/db/connection";
 
 export const runtime = "nodejs";
@@ -376,6 +378,112 @@ export async function POST(req: NextRequest) {
                 "items:", fallbackItems.length,
                 "confidence:", aiExtracted.overall_confidence
               );
+
+              // Review pipeline (2026-03-25): re-transcribe from audio and review/correct extraction.
+              // Runs async, does not block webhook response.
+              void (async () => {
+                try {
+                  const maxBytes = Number(process.env.REVIEW_AUDIO_MAX_BYTES || String(25 * 1024 * 1024));
+                  const threshold = Number(process.env.REVIEW_AUTO_PRINT_THRESHOLD || "85");
+
+                  const candidates = [
+                    recordingUrl,
+                    customerRecordingUrl,
+                    stereoRecordingUrl,
+                    assistantRecordingUrl,
+                  ].filter(Boolean) as string[];
+
+                  if (!candidates.length) {
+                    console.log("[review] No audio URLs available; skipping review", callId);
+                    return;
+                  }
+
+                  let audioTranscript: string | null = null;
+                  let lastErr: any = null;
+                  for (const url of candidates) {
+                    try {
+                      const { transcript } = await transcribeAudioUrl(url, {
+                        maxBytes,
+                        language: "sv",
+                        timeoutMs: 25_000,
+                      });
+                      audioTranscript = transcript;
+                      break;
+                    } catch (err) {
+                      lastErr = err;
+                      continue;
+                    }
+                  }
+
+                  if (!audioTranscript) {
+                    console.error("[review] Failed to transcribe any audio candidate", {
+                      callId,
+                      error: lastErr?.message || String(lastErr),
+                    });
+                    return;
+                  }
+
+                  const review = await reviewExtractedOrder({
+                    languageHint: "sv",
+                    originalTranscript: transcriptValue,
+                    audioTranscript,
+                    initialExtractionJson: aiExtracted,
+                  });
+
+                  // Apply review results
+                  fallbackOrder.reviewTranscript = audioTranscript;
+                  fallbackOrder.reviewJson = review;
+                  fallbackOrder.reviewChanges = review.changes;
+                  fallbackOrder.reviewNotes = review.review_notes;
+                  fallbackOrder.reviewConfidence = review.overall_confidence;
+                  fallbackOrder.needsHumanReview = review.needs_human_review;
+                  fallbackOrder.finalExtractedJson = review.final_extraction_json;
+                  fallbackOrder.reviewedAt = new Date().toISOString();
+
+                  // Also update order fields used for printing
+                  const final = review.final_extraction_json;
+                  const finalItems = (final?.items || []).map((item: any) => ({
+                    name: item.name,
+                    quantity: item.quantity,
+                    description: [...(item.modifications || []), item.notes].filter(Boolean).join(", ") || undefined,
+                  }));
+                  if (finalItems.length) {
+                    fallbackOrder.items = finalItems;
+                  }
+                  if (final?.address) {
+                    fallbackOrder.customerAddress = final.address;
+                  }
+                  if (final?.fulfillment && final.fulfillment !== "unknown") {
+                    fallbackOrder.fulfillmentType = final.fulfillment as FulfillmentType;
+                  }
+
+                  // Decide if we can auto-print
+                  const okToAutoPrint = !review.needs_human_review && review.overall_confidence >= threshold;
+                  fallbackOrder.status = okToAutoPrint ? "confirmed" : "pending_review";
+
+                  await updateOrder(fallbackOrder);
+
+                  if (okToAutoPrint) {
+                    void runPrintPipeline(fallbackOrder, { organizationId: org.id }).catch((error) => {
+                      console.error("[review] print exception", {
+                        callId,
+                        error: error?.message || String(error),
+                      });
+                    });
+                  } else {
+                    console.log("[review] held for human review", {
+                      callId,
+                      confidence: review.overall_confidence,
+                      needsHumanReview: review.needs_human_review,
+                    });
+                  }
+                } catch (err: any) {
+                  console.error("[review] pipeline error", {
+                    callId,
+                    error: err?.message || String(err),
+                  });
+                }
+              })();
             } catch (err: any) {
               console.error("[VAPI Webhook] end-of-call: AI extraction error", err?.message || err);
             }
