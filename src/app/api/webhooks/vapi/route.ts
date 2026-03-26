@@ -554,6 +554,192 @@ export async function POST(req: NextRequest) {
           })();
         }
 
+        // Review pipeline for structured-output orders: always re-transcribe and verify
+        if (structuredOrder && transcriptValue && transcriptValue.length >= 20) {
+          void (async () => {
+            try {
+              const maxBytes = Number(process.env.REVIEW_AUDIO_MAX_BYTES || String(25 * 1024 * 1024));
+              const threshold = Number(process.env.REVIEW_AUTO_PRINT_THRESHOLD || "85");
+
+              // Find the order that was created by upsertOrderFromStructuredOutput
+              const createdOrder = await findOrderByOrderIdByOrganization(callId, org.id);
+              if (!createdOrder) {
+                console.log("[review-structured] No order found for structured flow; skipping review", callId);
+                return;
+              }
+
+              // For transcription accuracy, prefer customer-only mono first.
+              const candidates = [
+                customerRecordingUrl,
+                recordingUrl,
+                stereoRecordingUrl,
+                assistantRecordingUrl,
+              ].filter(Boolean) as string[];
+
+              if (!candidates.length) {
+                console.log("[review-structured] No audio URLs available; skipping review", callId);
+                return;
+              }
+
+              let audioTranscript: string | null = null;
+              let lastErr: any = null;
+              for (const url of candidates) {
+                try {
+                  const { transcript } = await transcribeAudioUrl(url, {
+                    maxBytes,
+                    language: "sv",
+                    timeoutMs: 25_000,
+                    prompt: process.env.OPENAI_TRANSCRIBE_PROMPT || undefined,
+                  });
+                  audioTranscript = transcript;
+                  break;
+                } catch (err) {
+                  lastErr = err;
+                  continue;
+                }
+              }
+
+              if (!audioTranscript) {
+                console.error("[review-structured] Failed to transcribe any audio candidate", {
+                  callId,
+                  error: lastErr?.message || String(lastErr),
+                });
+                return;
+              }
+
+              // Convert structured order data to ExtractedOrder shape for initialExtractionJson
+              const initialExtraction = {
+                items: structuredOrder.data.items || [],
+                fulfillment: structuredOrder.data.fulfillment || "unknown",
+                address: structuredOrder.data.address || structuredOrder.data.deliveryAddress || structuredOrder.data.customerAddress || undefined,
+                overall_confidence: 95, // Structured output has high confidence
+              };
+
+              const review = await reviewExtractedOrder({
+                languageHint: "sv",
+                originalTranscript: transcriptValue,
+                audioTranscript,
+                initialExtractionJson: initialExtraction,
+              });
+
+              // Apply review results to the created order
+              createdOrder.reviewTranscript = audioTranscript;
+              createdOrder.reviewJson = review;
+              createdOrder.reviewChanges = review.changes;
+              createdOrder.reviewNotes = review.review_notes;
+              createdOrder.reviewConfidence = review.overall_confidence;
+              createdOrder.needsHumanReview = review.needs_human_review;
+              createdOrder.finalExtractedJson = review.final_extraction_json;
+              createdOrder.reviewedAt = new Date().toISOString();
+
+              // Also update order fields used for printing
+              const final = review.final_extraction_json;
+
+              // Heuristic guard: prevent garbage / instruction-like strings from being printed as items.
+              const looksLikeGarbageItemName = (name: string) => {
+                const n = (name || "").trim().toLowerCase();
+                if (!n) return true;
+                // Common instruction/assistant words we never want as items
+                if (
+                  /(jag\s+lyssnar|fortsätt|jag\s+väntar|tack|adjö|hej\s+då|redo|beställ|skär|skära|slice)/i.test(
+                    n
+                  )
+                ) {
+                  return true;
+                }
+                // Extremely long single-token strings are often hallucinations
+                if (!n.includes(" ") && n.length >= 18) return true;
+                // Lots of non-letters tends to be noise
+                const letters = (n.match(/[a-zåäö]/gi) || []).length;
+                if (letters < Math.min(4, n.length)) return true;
+                return false;
+              };
+
+              const removed: string[] = [];
+              const finalItems = (final?.items || [])
+                .map((item: any) => ({
+                  name: item.name,
+                  quantity: item.quantity,
+                  description:
+                    [...(item.modifications || []), item.notes]
+                      .filter(Boolean)
+                      .join(", ") || undefined,
+                }))
+                .filter((it: any) => {
+                  if (looksLikeGarbageItemName(it.name)) {
+                    removed.push(`${it.quantity || 1}× ${it.name}`);
+                    return false;
+                  }
+                  return true;
+                });
+
+              if (removed.length) {
+                const note = `Unclear phrase(s) ignored as items: ${removed.join("; ")}`;
+                createdOrder.specialInstructions = [createdOrder.specialInstructions, note]
+                  .filter(Boolean)
+                  .join(" | ");
+                // If we had to remove garbage, force human review
+                createdOrder.needsHumanReview = true;
+              }
+
+              // Additional hallucination check: item count vs transcript mentions
+              const transcriptLower = (transcriptValue || "").toLowerCase();
+              const itemMentions = [
+                ...transcriptLower.matchAll(/\b(?:pizza|calzone|sallad|pasta|hamburgare|kebab|gyros|falafel)\b/g),
+                ...transcriptLower.matchAll(/\b(?:hawaii|vesuvio|margherita|bolognese|capricciosa|pepperoni|salami)\b/g),
+                ...transcriptLower.matchAll(/\b(?:en|ett)\s+\w+/g),
+              ].length;
+
+              if (finalItems.length > itemMentions + 1) {
+                // Likely hallucination: more extracted items than mentioned in transcript
+                createdOrder.specialInstructions = [
+                  createdOrder.specialInstructions,
+                  `Warning: Extracted ${finalItems.length} items but transcript suggests ${itemMentions}. Check for toppings split into separate items.`,
+                ]
+                  .filter(Boolean)
+                  .join(" | ");
+                createdOrder.needsHumanReview = true;
+              }
+
+              if (finalItems.length) {
+                createdOrder.items = finalItems;
+              }
+              if (final?.address) {
+                createdOrder.customerAddress = final.address;
+              }
+              if (final?.fulfillment && final.fulfillment !== "unknown") {
+                createdOrder.fulfillmentType = final.fulfillment as FulfillmentType;
+              }
+
+              // Decide if we can auto-print
+              const okToAutoPrint = !review.needs_human_review && !removed.length && review.overall_confidence >= threshold;
+              createdOrder.status = okToAutoPrint ? "confirmed" : "pending_review";
+
+              await updateOrder(createdOrder);
+
+              if (okToAutoPrint) {
+                void runPrintPipeline(createdOrder, { organizationId: org.id }).catch((error) => {
+                  console.error("[review-structured] print exception", {
+                    callId,
+                    error: error?.message || String(error),
+                  });
+                });
+              } else {
+                console.log("[review-structured] held for human review", {
+                  callId,
+                  confidence: review.overall_confidence,
+                  needsHumanReview: review.needs_human_review,
+                });
+              }
+            } catch (err: any) {
+              console.error("[review-structured] pipeline error", {
+                callId,
+                error: err?.message || String(err),
+              });
+            }
+          })();
+        }
+
         void handleEndOfCall(
           {
             ...body,
