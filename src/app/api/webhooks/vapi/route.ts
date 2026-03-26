@@ -1490,14 +1490,37 @@ async function handleCallEnded(event: any, organizationId: string) {
 
     // Update call with ended status
     existingCall.status = "ended";
-    existingCall.endedAt = event.endedAt || event.timestamp || new Date().toISOString();
-    
-    // Calculate duration
+
+    // Prefer the *latest* endedAt we have seen (Rule B safety: never move endedAt backwards)
+    const candidateEndedAt = event.endedAt || event.timestamp || new Date().toISOString();
+    if (existingCall.endedAt) {
+      const prevEndedAtMs = new Date(existingCall.endedAt).getTime();
+      const nextEndedAtMs = new Date(candidateEndedAt).getTime();
+      existingCall.endedAt = nextEndedAtMs > prevEndedAtMs ? candidateEndedAt : existingCall.endedAt;
+    } else {
+      existingCall.endedAt = candidateEndedAt;
+    }
+
+    // Rule B: durationSeconds should only ever increase (status-update can be an early/partial snapshot)
+    const durationCandidates: number[] = [];
+
+    if (typeof event.durationSeconds === "number" && Number.isFinite(event.durationSeconds)) {
+      durationCandidates.push(Math.floor(event.durationSeconds));
+    }
+    if (typeof event.durationMs === "number" && Number.isFinite(event.durationMs)) {
+      durationCandidates.push(Math.floor(event.durationMs / 1000));
+    }
+
     if (existingCall.startedAt && existingCall.endedAt) {
       const startTime = new Date(existingCall.startedAt).getTime();
       const endTime = new Date(existingCall.endedAt).getTime();
-      existingCall.durationSeconds = Math.floor((endTime - startTime) / 1000);
+      const computed = Math.floor((endTime - startTime) / 1000);
+      if (Number.isFinite(computed)) durationCandidates.push(computed);
     }
+
+    const prevDuration = typeof existingCall.durationSeconds === "number" ? existingCall.durationSeconds : 0;
+    const nextDuration = durationCandidates.length ? Math.max(...durationCandidates, prevDuration) : prevDuration;
+    existingCall.durationSeconds = nextDuration;
 
     // Update business type if new detection is available (using scoring system)
     const detection = detectBusinessTypeFromCall(event);
