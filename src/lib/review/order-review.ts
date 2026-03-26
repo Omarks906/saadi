@@ -52,8 +52,8 @@ const REVIEW_SCHEMA = {
         type: "object",
         properties: {
           field: { type: "string" },
-          from: {},
-          to: {},
+          from: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "null" }] },
+          to: { anyOf: [{ type: "string" }, { type: "number" }, { type: "boolean" }, { type: "null" }] },
           reason: { type: "string" },
         },
         required: ["field", "from", "to", "reason"],
