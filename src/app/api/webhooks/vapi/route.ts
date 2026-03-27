@@ -130,11 +130,11 @@ export async function POST(req: NextRequest) {
       "messageKeys:",
       Object.keys(body?.message || {}),
       "callKeys:",
-      Object.keys(body?.call || {}),
+      Object.keys(body?.message?.call || body?.call || {}),
       "statusUpdateKeys:",
-      Object.keys(body?.statusUpdate || {}),
+      Object.keys(body?.message?.statusUpdate || body?.statusUpdate || {}),
       "endOfCallReportKeys:",
-      Object.keys(body?.endOfCallReport || {})
+      Object.keys(body?.message?.endOfCallReport || body?.endOfCallReport || {})
     );
     let org;
     try {
@@ -255,8 +255,18 @@ export async function POST(req: NextRequest) {
       const callId = body.message?.call?.id || report.call?.id || report.id || body.id;
       
       if (callId) {
+        // Gate printing/extraction: ONLY proceed when the assistant ended the call.
+        // Otherwise we risk printing cancelled/incomplete orders (customer hung up, call dropped, etc.).
+        const endedReason =
+          report.endedReason ||
+          report.call?.endedReason ||
+          body.message?.call?.endedReason ||
+          report.callEndedReason ||
+          null;
+        const endedByAssistant = endedReason === "assistant-ended-call";
+
         const structuredOrder = extractStructuredOrderFromReport(body, report);
-        if (structuredOrder) {
+        if (structuredOrder && endedByAssistant) {
           await upsertOrderFromStructuredOutput({
             body,
             report,
@@ -264,6 +274,11 @@ export async function POST(req: NextRequest) {
             organizationId: org.id,
             structuredOrder,
           });
+        } else if (structuredOrder && !endedByAssistant) {
+          console.log(
+            "[VAPI Webhook] end-of-call-report: structured output present but call not assistant-ended; skipping order upsert/print",
+            { callId, endedReason }
+          );
         }
         // Check if call exists, if not create it first
         let existingCall = await findCallByCallIdByOrganization(callId, org.id);
@@ -321,8 +336,8 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // AI extraction: run when no structured output was produced
-        if (transcriptValue && transcriptValue.length >= 20 && !structuredOrder) {
+        // AI extraction: run when no structured output was produced AND the assistant ended the call.
+        if (endedByAssistant && transcriptValue && transcriptValue.length >= 20 && !structuredOrder) {
           void (async () => {
             try {
               const fallbackOrderId = callId;
@@ -1575,14 +1590,9 @@ async function handleOrderConfirmed(
 ) {
   try {
     const orderId = extractOrderId(event);
-    const incomingName =
-      event.order?.customerName ||
-      event.order?.customer?.name ||
-      event.customerName ||
-      event.customer?.name ||
-      event.message?.customer?.name ||
-      event.call?.customer?.name ||
-      null;
+    // Customer name is NOT required for kitchen ops and is frequently wrong/hallucinated.
+    // Never ingest/print a customer name.
+    const incomingName = null;
     const incomingAddress =
       event.order?.customerAddress ||
       event.customerAddress ||
