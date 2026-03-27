@@ -258,6 +258,8 @@ export async function POST(req: NextRequest) {
         // Gate printing/extraction: ONLY proceed when the assistant ended the call.
         // Otherwise we risk printing cancelled/incomplete orders (customer hung up, call dropped, etc.).
         const endedReason =
+          // Prefer explicit end reason fields on the message/report
+          body.message?.endedReason ||
           report.endedReason ||
           report.call?.endedReason ||
           body.message?.call?.endedReason ||
