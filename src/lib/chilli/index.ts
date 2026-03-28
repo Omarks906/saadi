@@ -41,6 +41,7 @@ export {
 // Order normalizer (flat AI extraction → structured ChilliOrder)
 export {
   normalizeToChilliOrder,
+  normalizeSingleItemName,
   buildPizzaDescription,
   type RawExtractedItem,
 } from "./normalize-order";

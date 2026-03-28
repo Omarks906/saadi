@@ -86,6 +86,14 @@ export type OrderMetadata = z.infer<typeof OrderMetadataSchema>;
 export const ChilliOrderSchema = z.object({
   pizzas: z.array(PizzaSchema),
   drinks: z.array(DrinkSchema),
+  /**
+   * Non-pizza, non-drink food items (pasta, salads, grill, etc.).
+   * Kept separately so they are never given pizza-specific modifiers.
+   */
+  otherItems: z.array(z.object({
+    name: z.string().min(1),
+    quantity: z.number().int().min(1),
+  })).default([]),
   fulfillment: FulfillmentSchema,
   metadata: OrderMetadataSchema,
 });
@@ -105,8 +113,21 @@ export type ChilliOrder = z.infer<typeof ChilliOrderSchema>;
 export const OPENAI_ORDER_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["pizzas", "drinks", "fulfillment", "metadata"],
+  required: ["pizzas", "drinks", "otherItems", "fulfillment", "metadata"],
   properties: {
+    otherItems: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["name", "quantity"],
+        properties: {
+          name:     { type: "string" },
+          quantity: { type: "integer" },
+        },
+      },
+    },
+
     pizzas: {
       type: "array",
       items: {

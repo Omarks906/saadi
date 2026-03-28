@@ -38,6 +38,22 @@ function looksLikeDrink(name: string): boolean {
   return DRINK_PATTERN.test(name) && matchPizzaName(name) === null;
 }
 
+/**
+ * Returns true for non-pizza food items: pasta dishes, salads, grill items, etc.
+ * These must never receive pizza-specific modifiers (size, sauce, sliced).
+ *
+ * "\bpasta\b" is the strongest signal — "Bolognese pasta" is a pasta dish even
+ * though "Bolognese" is also a pizza name.
+ */
+function looksLikeNonPizzaFood(name: string): boolean {
+  if (/\bpasta\b/i.test(name)) return true;
+  // Salads/grill/sides that are clearly not pizzas and don't match the pizza menu
+  return (
+    /\bsallad\b|\bschnitzel\b|\bbiff\s+med\b|\bgrillad?\s+(?:kyckling|lax)\b|\bkebabtallrik\b|\bfalafeltallrik\b/i.test(name) &&
+    matchPizzaName(name) === null
+  );
+}
+
 // ── Modifier extraction ───────────────────────────────────────────────────────
 
 interface ParsedModifiers {
@@ -231,6 +247,7 @@ export function normalizeToChilliOrder(
 ): ChilliOrder {
   const pizzas: Pizza[] = [];
   const drinks: Drink[] = [];
+  const otherItems: Array<{ name: string; quantity: number }> = [];
 
   for (const item of items) {
     const name = item.name?.trim();
@@ -241,11 +258,20 @@ export function normalizeToChilliOrder(
       item.description ?? (item.notes != null ? String(item.notes) : null);
     const qty = Math.max(1, item.quantity || 1);
 
+    // ── Drinks ──────────────────────────────────────────────────────────────
     if (looksLikeDrink(name)) {
       drinks.push({ name, quantity: qty });
       continue;
     }
 
+    // ── Non-pizza food (pasta, salads, grill) ────────────────────────────────
+    // Keep as-is; never apply pizza modifiers (size/sauce/sliced) to them.
+    if (looksLikeNonPizzaFood(name)) {
+      otherItems.push({ name, quantity: qty });
+      continue;
+    }
+
+    // ── Pizza ────────────────────────────────────────────────────────────────
     // Strip modifier language baked into the item name (AI often produces compound
     // names like "gluten-free family Hawaii pizza with piripiri sauce (sliced)").
     // Match on the stripped core first so modifier words don't poison the fuzzy score.
@@ -270,6 +296,7 @@ export function normalizeToChilliOrder(
   return {
     pizzas,
     drinks,
+    otherItems,
     fulfillment: { type: detectFulfillment(transcript, extractedFulfillment) },
     metadata: {
       customerNumber: null,
@@ -277,4 +304,30 @@ export function normalizeToChilliOrder(
       specialRequests: [],
     },
   };
+}
+
+// ── Structured-output item name normalizer ────────────────────────────────────
+
+/**
+ * Apply pizza-name fuzzy matching to a single raw item name.
+ * Used in the structured-output path where full normalizeToChilliOrder
+ * doesn't run but item names still benefit from canonical name resolution.
+ *
+ * Returns the canonical menu name if matched, or the original name unchanged.
+ * Never returns null — safe to call on any item (drinks, pasta, etc.).
+ *
+ * @example
+ *   normalizeSingleItemName("Tropicana pizza") → "Tropicana"
+ *   normalizeSingleItemName("Capricciosa pizza") → "Capricciosa"
+ *   normalizeSingleItemName("Carbonara pasta")   → "Carbonara pasta"  (no match → unchanged)
+ *   normalizeSingleItemName("Coca-Cola Zero")     → "Coca-Cola Zero"  (no match → unchanged)
+ */
+export function normalizeSingleItemName(rawName: string): string {
+  if (!rawName?.trim()) return rawName;
+  const name = rawName.trim();
+  const { coreName } = extractCoreNameAndModifiers(name);
+  const matched =
+    (coreName ? matchPizzaName(coreName) : null) ??
+    matchPizzaName(name);
+  return matched ?? rawName;
 }
