@@ -19,7 +19,7 @@ import { extractOrderFromTranscript } from "@/lib/order-extract";
 import { extractOrderFromTranscript as extractOrderWithAI } from "@/lib/orderExtraction";
 import { transcribeAudioUrl } from "@/lib/review/transcribe";
 import { reviewExtractedOrder } from "@/lib/review/order-review";
-import { normalizeToChilliOrder, buildPizzaDescription } from "@/lib/chilli/normalize-order";
+import { normalizeToChilliOrder, normalizeSingleItemName, buildPizzaDescription } from "@/lib/chilli/normalize-order";
 import { safeParseChilliOrder } from "@/lib/chilli/order-schema";
 import { getPool, initDatabase } from "@/lib/db/connection";
 
@@ -381,7 +381,7 @@ export async function POST(req: NextRequest) {
               );
               const chilliValidation = safeParseChilliOrder(normalizedOrder);
               if (chilliValidation.success) {
-                const { pizzas, drinks, fulfillment } = chilliValidation.data;
+                const { pizzas, drinks, otherItems, fulfillment } = chilliValidation.data;
                 fallbackOrder.items = [
                   ...pizzas.map((p) => ({
                     name: p.pizzaName,
@@ -389,6 +389,7 @@ export async function POST(req: NextRequest) {
                     description: buildPizzaDescription(p),
                   })),
                   ...drinks.map((d) => ({ name: d.name, quantity: d.quantity })),
+                  ...otherItems.map((o) => ({ name: o.name, quantity: o.quantity })),
                 ];
                 fallbackOrder.metadata = {
                   ...(fallbackOrder.metadata as Record<string, unknown> ?? {}),
@@ -572,7 +573,7 @@ export async function POST(req: NextRequest) {
                   );
                   const finalChilliValidation = safeParseChilliOrder(normalizedFinal);
                   if (finalChilliValidation.success) {
-                    const { pizzas, drinks, fulfillment } = finalChilliValidation.data;
+                    const { pizzas, drinks, otherItems: reviewedOther, fulfillment } = finalChilliValidation.data;
                     const reviewedItems = [
                       ...pizzas.map((p) => ({
                         name: p.pizzaName,
@@ -580,6 +581,7 @@ export async function POST(req: NextRequest) {
                         description: buildPizzaDescription(p),
                       })),
                       ...drinks.map((d) => ({ name: d.name, quantity: d.quantity })),
+                      ...reviewedOther.map((o) => ({ name: o.name, quantity: o.quantity })),
                     ];
                     if (reviewedItems.length) fallbackOrder.items = reviewedItems;
                     fallbackOrder.metadata = {
@@ -1346,6 +1348,13 @@ async function upsertOrderFromStructuredOutput(params: {
     callId;
 
   const parsedItems = normalizeOrderItems(items);
+  // Resolve pizza item names to canonical menu names (e.g. "Tropicana pizza" → "Tropicana").
+  // No-op for drinks, pasta, and anything that doesn't match — names are never corrupted.
+  if (Array.isArray(parsedItems)) {
+    for (const item of parsedItems) {
+      item.name = normalizeSingleItemName(item.name);
+    }
+  }
   if (process.env.DEBUG_ORDER_ITEM_PARSE === "1") {
     console.log(
       JSON.stringify({
