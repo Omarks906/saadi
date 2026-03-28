@@ -86,7 +86,7 @@ function getFulfillmentTypeLabel(order?: ChilliOrder | null) {
   const value = order?.fulfillmentType?.toLowerCase() || "";
   if (value.includes("deliver")) return "DELIVERY";
   if (value.includes("pickup")) return "PICKUP";
-  if (value.includes("dine_in") || value.includes("dine-in")) return "EAT IN";
+  if (value.includes("dine_in") || value.includes("dine-in") || value === "eat-in" || value.includes("eat_in")) return "EAT IN";
   return order?.fulfillmentType ? order.fulfillmentType.toUpperCase() : "—";
 }
 
@@ -121,7 +121,7 @@ function getFulfillmentLabel(order?: ChilliOrder | null) {
   const value = order?.fulfillmentType?.toLowerCase() || "";
   if (value.includes("deliver")) return "Delivery";
   if (value.includes("pickup")) return "Pickup";
-  if (value.includes("dine_in") || value.includes("dine-in")) return "Eat In";
+  if (value.includes("dine_in") || value.includes("dine-in") || value === "eat-in" || value.includes("eat_in")) return "Eat In";
   return order?.fulfillmentType || "—";
 }
 

@@ -398,7 +398,7 @@ export async function POST(req: NextRequest) {
               );
               const chilliValidation = safeParseChilliOrder(normalizedOrder);
               if (chilliValidation.success) {
-                const { pizzas, drinks } = chilliValidation.data;
+                const { pizzas, drinks, fulfillment } = chilliValidation.data;
                 fallbackOrder.items = [
                   ...pizzas.map((p) => ({
                     name: p.pizzaName,
@@ -411,9 +411,14 @@ export async function POST(req: NextRequest) {
                   ...(fallbackOrder.metadata as Record<string, unknown> ?? {}),
                   chilliOrder: chilliValidation.data,
                 };
+                // Write fulfillment back to the DB column (ChilliOrder "eat-in" → DB "dine_in")
+                fallbackOrder.fulfillmentType = (
+                  fulfillment.type === "eat-in" ? "dine_in" : fulfillment.type
+                ) as FulfillmentType;
                 console.log("[normalize] ChilliOrder validated", callId, {
                   pizzas: pizzas.length,
                   drinks: drinks.length,
+                  fulfillment: fulfillment.type,
                   names: pizzas.map((p) => p.pizzaName),
                 });
               } else {
@@ -584,7 +589,7 @@ export async function POST(req: NextRequest) {
                   );
                   const finalChilliValidation = safeParseChilliOrder(normalizedFinal);
                   if (finalChilliValidation.success) {
-                    const { pizzas, drinks } = finalChilliValidation.data;
+                    const { pizzas, drinks, fulfillment } = finalChilliValidation.data;
                     const reviewedItems = [
                       ...pizzas.map((p) => ({
                         name: p.pizzaName,
@@ -598,9 +603,14 @@ export async function POST(req: NextRequest) {
                       ...(fallbackOrder.metadata as Record<string, unknown> ?? {}),
                       chilliOrder: finalChilliValidation.data,
                     };
+                    // Write reviewed fulfillment back to DB column
+                    fallbackOrder.fulfillmentType = (
+                      fulfillment.type === "eat-in" ? "dine_in" : fulfillment.type
+                    ) as FulfillmentType;
                     console.log("[normalize] ChilliOrder re-validated after review", callId, {
                       pizzas: pizzas.length,
                       drinks: drinks.length,
+                      fulfillment: fulfillment.type,
                       names: pizzas.map((p) => p.pizzaName),
                     });
                   }
