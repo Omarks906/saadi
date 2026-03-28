@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { PIZZA_MENU_NAMES } from "./chilli/match-pizza-name";
 
 export type ExtractedOrder = {
   fulfillment: "pickup" | "delivery" | "unknown";
@@ -55,7 +56,16 @@ const ORDER_JSON_SCHEMA = {
   additionalProperties: false,
 };
 
-const SYSTEM_PROMPT = `Du är ett AI-system som extraherar matbeställningar från telefonsamtalsutskrifter.
+// Build a compact menu string at module load time (cheap — runs once).
+const _PIZZA_MENU_LINE = PIZZA_MENU_NAMES.join(", ");
+
+const SYSTEM_PROMPT = `Du är ett AI-system som extraherar matbeställningar från telefonsamtalsutskrifter för Chilli Pizzeria.
+
+PIZZA-MENY (exakta tillåtna pizzanamn):
+${_PIZZA_MENU_LINE}
+
+Pasta, sallader och andra rätter utöver pizza ska extraheras med deras korrekta namn (t.ex. "Carbonara pasta", "Bolognese pasta").
+Drycker extraheras med sitt vanliga namn (t.ex. "Coca-Cola Zero", "Fanta apelsin").
 
 KRITISKA REGLER (bryt aldrig):
 - En pizza/maträtt med toppings = EN artikel, inte flera
@@ -63,10 +73,13 @@ KRITISKA REGLER (bryt aldrig):
 - "Hawaii med extra ost" = EN hawaii-pizza med extra-ost-modifikation
 - Skapa ALDRIG separata artiklar för toppings/ingredienser
 - Om kunden säger "X med Y" → gör Y till en modifikation på X
+- Namnge pizzor med EXAKT det menynamn som bäst matchar vad kunden sa
 
 Extraktionsregler:
-- Extrahera exakt vad kunden beställde — hitta INTE på artiklar
-- Använd kundens exakta ord för pizzanamn
+- Mappa alltid pizzanamn till närmaste namn i pizza-menyn ovan
+- Kunden kan uttala pizzanamn på svenska/dialekt — matcha ändå till menyn
+  Exempel: "pizza värld" → "Pizza Verde", "pizza grön" → "Pizza Verde",
+           "tropicana" → "Tropicana", "carbonara" → om pasta → "Carbonara pasta"
 - Lägg toppings/tillägg i modifikations-listan, inte som separata items
 - Uppskatta konfidens (0-100) per artikel och totalt
 - Sätt needs_review=true om konfidens < 70 eller om information saknas
@@ -76,8 +89,8 @@ Exempel:
 Input: "Hawaii familjestorlek med extra ost och en Margherita"
 Output: 2 items - "Hawaii" (familjestorlek, modifikation: extra ost), "Margherita"
 
-Input: "Chili special med pepperoni på"
-Output: 1 item - "Chili special" (modifikation: pepperoni)
+Input: "Pizza verde familj med pirri pirri sås, skiva den"
+Output: 1 item - "Pizza Verde" (modifikation: familjestorlek, pirri pirri sås, skivad)
 
 Svara alltid på JSON-formatet som specificerats.`;
 
