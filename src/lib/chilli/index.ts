@@ -21,6 +21,15 @@ export {
   type CategoryInfo,
 } from "./menu";
 
+// Pizza name fuzzy matcher (STT → canonical menu name)
+export {
+  matchPizzaName,
+  matchPizzaNameDebug,
+  PIZZA_MENU_NAMES,
+  type MatchMethod,
+  type MatchResult,
+} from "./match-pizza-name";
+
 // Restaurant configuration
 export {
   CHILLI_CONFIG,
