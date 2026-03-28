@@ -38,6 +38,13 @@ export {
   type OrderMetadata,
 } from "./order-schema";
 
+// Order normalizer (flat AI extraction → structured ChilliOrder)
+export {
+  normalizeToChilliOrder,
+  buildPizzaDescription,
+  type RawExtractedItem,
+} from "./normalize-order";
+
 // Pizza name fuzzy matcher (STT → canonical menu name)
 export {
   matchPizzaName,

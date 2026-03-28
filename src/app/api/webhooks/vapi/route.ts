@@ -19,6 +19,8 @@ import { extractOrderFromTranscript } from "@/lib/order-extract";
 import { extractOrderFromTranscript as extractOrderWithAI } from "@/lib/orderExtraction";
 import { transcribeAudioUrl } from "@/lib/review/transcribe";
 import { reviewExtractedOrder } from "@/lib/review/order-review";
+import { normalizeToChilliOrder, buildPizzaDescription } from "@/lib/chilli/normalize-order";
+import { safeParseChilliOrder } from "@/lib/chilli/order-schema";
 import { getPool, initDatabase } from "@/lib/db/connection";
 
 export const runtime = "nodejs";
@@ -371,6 +373,43 @@ export async function POST(req: NextRequest) {
               fallbackOrder.extractedJson = aiExtracted;
               fallbackOrder.overallConfidence = aiExtracted.overall_confidence;
 
+              // Normalize to ChilliOrder: fuzzy-match pizza names + extract structured modifiers
+              const normalizedOrder = normalizeToChilliOrder(
+                aiExtracted.items,
+                transcriptValue,
+                aiExtracted.fulfillment,
+              );
+              const chilliValidation = safeParseChilliOrder(normalizedOrder);
+              if (chilliValidation.success) {
+                const { pizzas, drinks } = chilliValidation.data;
+                fallbackOrder.items = [
+                  ...pizzas.map((p) => ({
+                    name: p.pizzaName,
+                    quantity: 1,
+                    description: buildPizzaDescription(p),
+                  })),
+                  ...drinks.map((d) => ({ name: d.name, quantity: d.quantity })),
+                ];
+                fallbackOrder.metadata = {
+                  ...(fallbackOrder.metadata as Record<string, unknown> ?? {}),
+                  chilliOrder: chilliValidation.data,
+                };
+                console.log("[normalize] ChilliOrder validated", callId, {
+                  pizzas: pizzas.length,
+                  drinks: drinks.length,
+                  names: pizzas.map((p) => p.pizzaName),
+                });
+              } else {
+                console.warn(
+                  "[normalize] ChilliOrder validation failed",
+                  callId,
+                  chilliValidation.error.issues
+                    .slice(0, 3)
+                    .map((e) => `${e.path.join(".")}: ${e.message}`)
+                    .join("; "),
+                );
+              }
+
               await updateOrder(fallbackOrder);
               console.log(
                 "[VAPI Webhook] end-of-call: created pending_review order via AI extraction",
@@ -514,6 +553,41 @@ export async function POST(req: NextRequest) {
                   if (finalItems.length) {
                     fallbackOrder.items = finalItems;
                   }
+
+                  // Re-normalize with the reviewed (higher-quality) extraction
+                  const normalizedFinal = normalizeToChilliOrder(
+                    (final?.items ?? []).map((i: any) => ({
+                      name: i.name,
+                      quantity: i.quantity,
+                      modifications: i.modifications,
+                      notes: i.notes,
+                    })),
+                    audioTranscript ?? transcriptValue,
+                    final?.fulfillment,
+                  );
+                  const finalChilliValidation = safeParseChilliOrder(normalizedFinal);
+                  if (finalChilliValidation.success) {
+                    const { pizzas, drinks } = finalChilliValidation.data;
+                    const reviewedItems = [
+                      ...pizzas.map((p) => ({
+                        name: p.pizzaName,
+                        quantity: 1,
+                        description: buildPizzaDescription(p),
+                      })),
+                      ...drinks.map((d) => ({ name: d.name, quantity: d.quantity })),
+                    ];
+                    if (reviewedItems.length) fallbackOrder.items = reviewedItems;
+                    fallbackOrder.metadata = {
+                      ...(fallbackOrder.metadata as Record<string, unknown> ?? {}),
+                      chilliOrder: finalChilliValidation.data,
+                    };
+                    console.log("[normalize] ChilliOrder re-validated after review", callId, {
+                      pizzas: pizzas.length,
+                      drinks: drinks.length,
+                      names: pizzas.map((p) => p.pizzaName),
+                    });
+                  }
+
                   if (final?.address) {
                     fallbackOrder.customerAddress = final.address;
                   }
