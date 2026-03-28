@@ -21,6 +21,32 @@ export {
   type CategoryInfo,
 } from "./menu";
 
+// Structured post-call order schema (Zod + OpenAI JSON Schema)
+export {
+  ChilliOrderSchema,
+  PizzaSchema,
+  DrinkSchema,
+  FulfillmentSchema,
+  OrderMetadataSchema,
+  OPENAI_ORDER_SCHEMA,
+  parseChilliOrder,
+  safeParseChilliOrder,
+  type ChilliOrder,
+  type Pizza,
+  type Drink,
+  type Fulfillment,
+  type OrderMetadata,
+} from "./order-schema";
+
+// Pizza name fuzzy matcher (STT → canonical menu name)
+export {
+  matchPizzaName,
+  matchPizzaNameDebug,
+  PIZZA_MENU_NAMES,
+  type MatchMethod,
+  type MatchResult,
+} from "./match-pizza-name";
+
 // Restaurant configuration
 export {
   CHILLI_CONFIG,
