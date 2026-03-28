@@ -19,7 +19,7 @@ import { extractOrderFromTranscript } from "@/lib/order-extract";
 import { extractOrderFromTranscript as extractOrderWithAI } from "@/lib/orderExtraction";
 import { transcribeAudioUrl } from "@/lib/review/transcribe";
 import { reviewExtractedOrder } from "@/lib/review/order-review";
-import { normalizeToChilliOrder, normalizeSingleItemName, buildPizzaDescription } from "@/lib/chilli/normalize-order";
+import { normalizeToChilliOrder, normalizeSingleItemName, mergeModifierItems, buildPizzaDescription, type RawExtractedItem } from "@/lib/chilli/normalize-order";
 import { safeParseChilliOrder } from "@/lib/chilli/order-schema";
 import { getPool, initDatabase } from "@/lib/db/connection";
 
@@ -1365,11 +1365,39 @@ async function upsertOrderFromStructuredOutput(params: {
     callId;
 
   const parsedItems = normalizeOrderItems(items);
-  // Resolve pizza item names to canonical menu names (e.g. "Tropicana pizza" → "Tropicana").
-  // No-op for drinks, pasta, and anything that doesn't match — names are never corrupted.
-  if (Array.isArray(parsedItems)) {
-    for (const item of parsedItems) {
-      item.name = normalizeSingleItemName(item.name);
+
+  // ── Full ChilliOrder normalization on structured-output items ────────────────
+  // Vapi's AI often produces a flat list where each modifier is a separate entry
+  // (e.g. ["Tropicana", "glutenfri", "slajsad"]). We:
+  //   1. mergeModifierItems() — collapse modifier-only entries into the preceding pizza
+  //   2. normalizeToChilliOrder() — fuzzy-match names, extract modifiers, bucket items
+  //   3. Rebuild parsedItems in-place from the structured ChilliOrder
+  // Falls back to normalizeSingleItemName if validation fails.
+  let structuredChilliOrder: import("@/lib/chilli/order-schema").ChilliOrder | null = null;
+  if (Array.isArray(parsedItems) && parsedItems.length > 0) {
+    const rawItems: RawExtractedItem[] = parsedItems.map((i: any) => ({
+      name: String(i?.name ?? ""),
+      quantity: Number(i?.quantity) || 1,
+      description: i?.description ?? (i?.notes != null ? String(i.notes) : null),
+      modifications: Array.isArray(i?.modifications) ? i.modifications : [],
+    }));
+    const merged = mergeModifierItems(rawItems);
+    const normalizedOrder = normalizeToChilliOrder(merged, transcript ?? "", extractedFulfillment);
+    const chilliValidation = safeParseChilliOrder(normalizedOrder);
+    if (chilliValidation.success) {
+      structuredChilliOrder = chilliValidation.data;
+      const { pizzas, drinks, otherItems: soOther } = chilliValidation.data;
+      const rebuilt = [
+        ...pizzas.map((p) => ({ name: p.pizzaName, quantity: 1, description: buildPizzaDescription(p) })),
+        ...drinks.map((d) => ({ name: d.name, quantity: d.quantity })),
+        ...soOther.map((o) => ({ name: o.name, quantity: o.quantity })),
+      ];
+      parsedItems.splice(0, parsedItems.length, ...rebuilt);
+    } else {
+      // Fallback: at minimum canonicalize pizza names
+      for (const item of parsedItems) {
+        item.name = normalizeSingleItemName(item.name);
+      }
     }
   }
   if (process.env.DEBUG_ORDER_ITEM_PARSE === "1") {
@@ -1442,8 +1470,11 @@ async function upsertOrderFromStructuredOutput(params: {
     existingOrder.customerName = customerName || existingOrder.customerName;
     existingOrder.customerPhone =
       customerPhone || extractedPhone || existingOrder.customerPhone;
+    const soFulfillment = structuredChilliOrder?.fulfillment?.type === "eat-in"
+      ? "dine_in"
+      : structuredChilliOrder?.fulfillment?.type ?? null;
     existingOrder.fulfillmentType =
-      (fulfillment || extractedFulfillment || existingOrder.fulfillmentType)?.toLowerCase() as FulfillmentType || undefined;
+      (soFulfillment || fulfillment || extractedFulfillment || existingOrder.fulfillmentType)?.toLowerCase() as FulfillmentType || undefined;
     await updateOrder(existingOrder);
     console.log("[VAPI Webhook] end-of-call: Updated order from structured output", orderId);
     void runPrintPipeline(existingOrder, { organizationId }).catch((error) => {
@@ -1464,7 +1495,10 @@ async function upsertOrderFromStructuredOutput(params: {
   order.customerAddress = addressValue || order.customerAddress;
   order.customerName = customerName || order.customerName;
   order.customerPhone = customerPhone || order.customerPhone;
-  order.fulfillmentType = (fulfillment || extractedFulfillment || order.fulfillmentType)?.toLowerCase() as FulfillmentType || undefined;
+  const soFulfillmentNew = structuredChilliOrder?.fulfillment?.type === "eat-in"
+    ? "dine_in"
+    : structuredChilliOrder?.fulfillment?.type ?? null;
+  order.fulfillmentType = (soFulfillmentNew || fulfillment || extractedFulfillment || order.fulfillmentType)?.toLowerCase() as FulfillmentType || undefined;
   await updateOrder(order);
   console.log("[VAPI Webhook] end-of-call: Created order from structured output", order.id);
   void runPrintPipeline(order, { organizationId }).catch((error) => {

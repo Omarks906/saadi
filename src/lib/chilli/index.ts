@@ -42,6 +42,7 @@ export {
 export {
   normalizeToChilliOrder,
   normalizeSingleItemName,
+  mergeModifierItems,
   buildPizzaDescription,
   type RawExtractedItem,
 } from "./normalize-order";

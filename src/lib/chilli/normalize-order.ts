@@ -54,6 +54,76 @@ function looksLikeNonPizzaFood(name: string): boolean {
   );
 }
 
+/**
+ * Returns true if `name` appears directly adjacent to "pasta" in the transcript.
+ *
+ * Catches cases where the Vapi AI drops the "pasta" suffix from item names in
+ * structured output (e.g. "Bolognese pasta" → "Bolognese"), so the item would
+ * otherwise be mistaken for the Bolognese pizza.
+ */
+function appearsAsPastaInTranscript(name: string, transcript: string): boolean {
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return (
+    new RegExp(`\\b${esc}\\s+pasta\\b`, "i").test(transcript) ||
+    new RegExp(`\\bpasta\\s+${esc}\\b`, "i").test(transcript)
+  );
+}
+
+// ── Modifier-only item detection + merge ──────────────────────────────────────
+
+/**
+ * Returns true if the item name is a pure modifier token (size, sauce, sliced,
+ * gluten-free) that the Vapi AI produced as a separate flat item instead of
+ * nesting it inside the pizza object.
+ *
+ * Examples: "vanlig storlek", "Peri Peri sås", "slajsad", "glutenfri"
+ */
+function isModifierOnlyItem(name: string): boolean {
+  const n = name.toLowerCase().trim().replace(/[()]/g, "").trim();
+  // Size-only tokens (Swedish: vanlig = regular, storlek = size)
+  if (/^(vanlig|normal|family|stor|liten)\s*(storlek|size|pizza)?$/.test(n)) return true;
+  // Known sauce names with optional "sås/sauce" suffix
+  if (
+    /^(piri\s*piri|peri\s*peri|piripiri|pirri\s*pirri|kebab|vitlök|tomat|grädde|bearnaise|curry|tikka|bbq|jalapeño|jalapeno|aioli|barbecue)\s*(s[åa]s|sauce)?$/.test(n)
+  )
+    return true;
+  // Any "X sås" that isn't a pizza name
+  if (/^.+\s+s[åa]s$/.test(n) && !/\bpizza\b/.test(n)) return true;
+  // Sliced tokens
+  if (/^(slajsad[)]*|sliced|skivad|skär|slafsad)$/.test(n)) return true;
+  // Gluten-free tokens
+  if (/^gluten[\s-]*fri(tt|t)?$/.test(n) || /^gluten-?free$/.test(n)) return true;
+  // Extra topping tokens
+  if (/^extra\s+(ost|parmesan|cheese|mozzarella)$/.test(n)) return true;
+  return false;
+}
+
+/**
+ * Merge consecutive modifier-only items into the preceding item's description.
+ *
+ * Vapi's structured-output AI often produces a flat list where each modifier
+ * is a separate entry, e.g.:
+ *   ["Tropicana", "glutenfri", "slajsad", "Coca-Cola"]
+ * which becomes:
+ *   [{ name: "Tropicana", description: "glutenfri, slajsad" }, { name: "Coca-Cola" }]
+ *
+ * The reassembled list can then be passed to normalizeToChilliOrder() which reads
+ * modifiers from item.description and assigns them per-pizza correctly.
+ */
+export function mergeModifierItems(items: RawExtractedItem[]): RawExtractedItem[] {
+  const result: RawExtractedItem[] = [];
+  for (const item of items) {
+    const name = item.name?.trim() ?? "";
+    if (isModifierOnlyItem(name) && result.length > 0) {
+      const last = result[result.length - 1];
+      last.description = [last.description ?? "", name].filter(Boolean).join(", ");
+    } else {
+      result.push({ ...item });
+    }
+  }
+  return result;
+}
+
 // ── Modifier extraction ───────────────────────────────────────────────────────
 
 interface ParsedModifiers {
@@ -267,6 +337,13 @@ export function normalizeToChilliOrder(
     // ── Non-pizza food (pasta, salads, grill) ────────────────────────────────
     // Keep as-is; never apply pizza modifiers (size/sauce/sliced) to them.
     if (looksLikeNonPizzaFood(name)) {
+      otherItems.push({ name, quantity: qty });
+      continue;
+    }
+
+    // ── Transcript-context pasta detection ───────────────────────────────────
+    // Catches "Bolognese" (Vapi AI dropped "pasta") when transcript has "Bolognese pasta".
+    if (transcript && appearsAsPastaInTranscript(name, transcript)) {
       otherItems.push({ name, quantity: qty });
       continue;
     }
