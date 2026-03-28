@@ -122,13 +122,20 @@ export function extractObsNotes(items: RawExtractedItem[]): RawExtractedItem[] {
  */
 function isModifierOnlyItem(name: string): boolean {
   const n = name.toLowerCase().trim().replace(/[()]/g, "").trim();
+  // Garbage items: fewer than 2 meaningful alphanumeric characters (e.g. "-a-", "-")
+  const meaningful = n.replace(/[^a-zåäö0-9]/g, "");
+  if (meaningful.length <= 1) return true;
   // Size-only tokens (Swedish: vanlig = regular, storlek = size)
   if (/^(vanlig|normal|family|stor|liten)\s*(storlek|size|pizza)?$/.test(n)) return true;
-  // Known sauce names with optional "sås/sauce" suffix
+  // Known sauce names with optional "sås/sauce" suffix — full match (whole item is a sauce)
+  // Note: [- ]? handles "piri-piri" (dash), "piri piri" (space), "piripiri" (none)
   if (
-    /^(piri\s*piri|peri\s*peri|piripiri|pirri\s*pirri|kebab|vitlök|tomat|grädde|bearnaise|curry|tikka|bbq|jalapeño|jalapeno|aioli|barbecue)\s*(s[åa]s|sauce)?$/.test(n)
+    /^(piri[- ]?piri|peri[- ]?peri|piripiri|pirri[- ]?pirri|kebab|vitlök|tomat|grädde|bearnaise|curry|tikka|bbq|jalapeño|jalapeno|aioli|barbecue)\s*(s[åa]s|sauce)?$/.test(n)
   )
     return true;
+  // Sauce prefix: items STARTING with a sauce name (possibly with junk like "och -a-" after).
+  // E.g. "piri-piri-sås och -a-" → sauce modifier for the preceding pizza.
+  if (/^(piri[- ]?piri|peri[- ]?peri|piripiri|pirri[- ]?pirri|bearnaise|vitlök|kebab)\b/i.test(n)) return true;
   // Any "X sås" that isn't a pizza name
   if (/^.+\s+s[åa]s$/.test(n) && !/\bpizza\b/.test(n)) return true;
   // Sliced tokens
@@ -185,7 +192,7 @@ const CONSUMED_PATTERNS: RegExp[] = [
   /extra\s*parmesan/i,
   /skär\s+i\s+(?:skivor|slices?)|slajsad?|skivad|\bslice[d]?\b/i,
   /familj(?:e|epizza|storlek)?|vanlig|ordinarie/i,
-  /sås\s*[:：]\s*\S+(?:\s+\S+)?|pirri.?pirri|bearnaise|kebab\s*sås|vitlöks\s*sås|aioli|barbecue|bbq/i,
+  /sås\s*[:：]\s*\S+(?:\s+\S+)?|piri.?piri|pirri.?pirri|bearnaise|kebab\s*sås|vitlöks\s*sås|aioli|barbecue|bbq/i,
 ];
 
 /**
@@ -224,7 +231,7 @@ function parseModifiers(
   // Sauce: "sås: X" pattern takes priority, then known sauce names.
   // Falls back to scanning the transcript so that sauce is captured even when
   // the AI omits it from modifications[] (common for "piripiri sauce" in English).
-  const SAUCE_RE = /\b(pirri.?pirri|peri.?peri|piripiri|bearnaise|kebab\s*sås|vitlöks\s*sås|aioli|barbecue|bbq)\b/i;
+  const SAUCE_RE = /\b(piri.?piri|pirri.?pirri|peri.?peri|piripiri|bearnaise|kebab\s*sås|vitlöks\s*sås|aioli|barbecue|bbq)\b/i;
   let sauce: string | null = null;
   const explicitSauce = combined.match(/sås\s*[:：]\s*(\S+(?:\s+\S+)?)/i);
   if (explicitSauce) {
@@ -324,7 +331,7 @@ function extractCoreNameAndModifiers(raw: string): {
   const sauceInName =
     raw.match(/\bmed\s+(\w+(?:[\s-]\w+)?)\s*sås\b/i) ||
     raw.match(/\bwith\s+(\w+(?:[\s-]\w+)?)\s*sauce\b/i) ||
-    raw.match(/\b(piripiri|pirri.?pirri|bearnaise|kebab\s*sås|vitlöks\s*sås|aioli|barbecue|bbq)\b/i);
+    raw.match(/\b(piripiri|piri.?piri|pirri.?pirri|bearnaise|kebab\s*sås|vitlöks\s*sås|aioli|barbecue|bbq)\b/i);
   if (sauceInName) nameModifiers.push(`sås: ${sauceInName[1].trim()}`);
 
   // Strip all modifier language from the name to isolate the pizza name
@@ -334,7 +341,7 @@ function extractCoreNameAndModifiers(raw: string): {
     .replace(/vanlig|ordinarie|normal\s*(?:size|storlek)/gi, "")
     .replace(/\bmed\s+\w+(?:[\s-]\w+)?\s*sås\b/gi, "")
     .replace(/\bwith\s+\w+(?:[\s-]\w+)?\s*sauce\b/gi, "")
-    .replace(/\bpiripiri\b|\bpirri.?pirri\b|\bbearnaise\b|\bkebab\s*sås\b|\bvitlöks\s*sås\b|\baioli\b|\bbarbecue\b|\bbbq\b/gi, "")
+    .replace(/\bpiripiri\b|\bpiri.?piri\b|\bpirri.?pirri\b|\bbearnaise\b|\bkebab\s*sås\b|\bvitlöks\s*sås\b|\baioli\b|\bbarbecue\b|\bbbq\b/gi, "")
     .replace(/\(?slajsad?\)?|\(?skivad[et]?\)?|\(?sliced?\)?|skär\s+i\s+skivor/gi, "")
     .replace(/extra\s*(?:ost|mozzarella|cheese|parmesan)/gi, "")
     .replace(/\bmed\b|\bwith\b|\bsize\b|\bstorlek\b/gi, "")
