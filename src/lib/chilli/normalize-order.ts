@@ -87,13 +87,17 @@ function appearsAsPastaInTranscript(name: string, transcript: string): boolean {
 export function extractObsNotes(items: RawExtractedItem[]): RawExtractedItem[] {
   // Matches ". (Obs: 'text')" or " (Obs: text)" with optional quotes
   const OBS_RE = /\.?\s*\(Obs:\s*['"]?([^'")\n]+?)['"]?\s*\)/i;
+  // Strip AI interpretation notes that add no value: "(tolkat som X)", "(interpreted as X)"
+  const INTERP_RE = /\s*\(tolkat\s+som\s+[^)]+\)/i;
   // Signals that the obs text describes a pizza order (not just a generic note)
   const PIZZA_SIGNAL =
     /familj|storlek|piripiri|pirri|sås|sauce|gluten|slajsad?|skivad|sliced|family\s*size/i;
 
   const result: RawExtractedItem[] = [];
   for (const item of items) {
-    const name = item.name?.trim() ?? "";
+    let name = item.name?.trim() ?? "";
+    // Strip "(tolkat som X)" interpretation notes from all items
+    name = name.replace(INTERP_RE, "").trim();
     const obsMatch = OBS_RE.exec(name);
     if (obsMatch) {
       const cleanName = name.replace(OBS_RE, "").trim();
@@ -103,7 +107,7 @@ export function extractObsNotes(items: RawExtractedItem[]): RawExtractedItem[] {
         result.push({ name: obsText, quantity: 1, description: null, modifications: [] });
       }
     } else {
-      result.push(item);
+      result.push({ ...item, name });
     }
   }
   return result;
@@ -179,7 +183,7 @@ const CONSUMED_PATTERNS: RegExp[] = [
   /glutenfri|gluten.?fri|\bgf\b/i,
   /extra\s*(?:ost|mozzarella|cheese)/i,
   /extra\s*parmesan/i,
-  /skär\s+i\s+(?:skivor|slices?)|slajsa|\bslice\b/i,
+  /skär\s+i\s+(?:skivor|slices?)|slajsad?|skivad|\bslice[d]?\b/i,
   /familj(?:e|epizza|storlek)?|vanlig|ordinarie/i,
   /sås\s*[:：]\s*\S+(?:\s+\S+)?|pirri.?pirri|bearnaise|kebab\s*sås|vitlöks\s*sås|aioli|barbecue|bbq/i,
 ];
@@ -205,9 +209,10 @@ function parseModifiers(
 
   const extra_parmesan = /extra\s*parmesan/i.test(combined);
 
-  const sliced =
-    /skär\s+i\s+(?:skivor|slices?)|slajsa|\bslice\b/i.test(combined) ||
-    /skär\s+i\s+(?:skivor|slices?)|slajsa/i.test(context);
+  // Sliced: match both Swedish ("skivad", "slajsad", "skär i skivor") and English ("slice", "sliced")
+  // in both the item's own modifiers AND the transcript context.
+  const SLICED_RE = /skär\s+i\s+(?:skivor|slices?)|slajsad?|skivad|\bslice[d]?\b/i;
+  const sliced = SLICED_RE.test(combined) || SLICED_RE.test(context);
 
   const size: "vanlig" | "family" =
     /familj(?:e|epizza|storlek)?/i.test(combined) ||
@@ -216,15 +221,22 @@ function parseModifiers(
       : "vanlig";
 
   // Sauce: "sås: X" pattern takes priority, then known sauce names
+  // Sauce: "sås: X" pattern takes priority, then known sauce names.
+  // Falls back to scanning the transcript so that sauce is captured even when
+  // the AI omits it from modifications[] (common for "piripiri sauce" in English).
+  const SAUCE_RE = /\b(pirri.?pirri|peri.?peri|piripiri|bearnaise|kebab\s*sås|vitlöks\s*sås|aioli|barbecue|bbq)\b/i;
   let sauce: string | null = null;
   const explicitSauce = combined.match(/sås\s*[:：]\s*(\S+(?:\s+\S+)?)/i);
   if (explicitSauce) {
     sauce = explicitSauce[1].trim();
   } else {
-    const knownSauce = combined.match(
-      /\b(pirri.?pirri|bearnaise|kebab\s*sås|vitlöks\s*sås|aioli|barbecue|bbq)\b/i,
-    );
+    const knownSauce = combined.match(SAUCE_RE);
     if (knownSauce) sauce = knownSauce[1].trim();
+    else {
+      // Transcript fallback: scan the full call transcript for sauce mentions
+      const transcriptSauce = context.match(SAUCE_RE);
+      if (transcriptSauce) sauce = transcriptSauce[1].trim();
+    }
   }
 
   // toppingMods: modification strings left after stripping recognised signals
