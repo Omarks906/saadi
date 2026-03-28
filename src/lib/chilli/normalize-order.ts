@@ -72,6 +72,44 @@ function appearsAsPastaInTranscript(name: string, transcript: string): boolean {
 // ── Modifier-only item detection + merge ──────────────────────────────────────
 
 /**
+ * Strip "(Obs: X)" / "(Note: X)" annotations that Vapi AI embeds in item names
+ * when it encounters something it can't classify. If the annotation text looks
+ * like a pizza order (contains size/sauce/modifier words), extract it as a new
+ * item so normalizeToChilliOrder() can attempt to match it.
+ *
+ * Example:
+ *   {name: "Coca Cola Zero. (Obs: 'vidda värld i familj storlek, piripiri')"}
+ * becomes:
+ *   [{name: "Coca Cola Zero"}, {name: "vidda värld i familj storlek, piripiri"}]
+ *
+ * The second item will fuzzy-match to "Pizza Verde" via the phonetic alias table.
+ */
+export function extractObsNotes(items: RawExtractedItem[]): RawExtractedItem[] {
+  // Matches ". (Obs: 'text')" or " (Obs: text)" with optional quotes
+  const OBS_RE = /\.?\s*\(Obs:\s*['"]?([^'")\n]+?)['"]?\s*\)/i;
+  // Signals that the obs text describes a pizza order (not just a generic note)
+  const PIZZA_SIGNAL =
+    /familj|storlek|piripiri|pirri|sås|sauce|gluten|slajsad?|skivad|sliced|family\s*size/i;
+
+  const result: RawExtractedItem[] = [];
+  for (const item of items) {
+    const name = item.name?.trim() ?? "";
+    const obsMatch = OBS_RE.exec(name);
+    if (obsMatch) {
+      const cleanName = name.replace(OBS_RE, "").trim();
+      result.push({ ...item, name: cleanName || name });
+      const obsText = obsMatch[1].trim();
+      if (PIZZA_SIGNAL.test(obsText)) {
+        result.push({ name: obsText, quantity: 1, description: null, modifications: [] });
+      }
+    } else {
+      result.push(item);
+    }
+  }
+  return result;
+}
+
+/**
  * Returns true if the item name is a pure modifier token (size, sauce, sliced,
  * gluten-free) that the Vapi AI produced as a separate flat item instead of
  * nesting it inside the pizza object.
@@ -266,7 +304,7 @@ function extractCoreNameAndModifiers(raw: string): {
   if (/gluten.?fri|gluten.?free/i.test(raw))                    nameModifiers.push("glutenfri");
   if (/familj(?:e|estorlek|epizza)?|family\s*size/i.test(raw))  nameModifiers.push("familj");
   if (/vanlig|ordinarie|normal\s*(?:size|storlek)/i.test(raw))  nameModifiers.push("vanlig");
-  if (/skivad[et]?|\bsliced?\b|skär\s+i\s+skivor/i.test(raw))   nameModifiers.push("skär i skivor");
+  if (/slajsad?|skivad[et]?|\bsliced?\b|skär\s+i\s+skivor/i.test(raw)) nameModifiers.push("skär i skivor");
   if (/extra\s*parmesan/i.test(raw))                            nameModifiers.push("extra parmesan");
   if (/extra\s*(?:ost|mozzarella|cheese)/i.test(raw))           nameModifiers.push("extra ost");
 
@@ -285,7 +323,7 @@ function extractCoreNameAndModifiers(raw: string): {
     .replace(/\bmed\s+\w+(?:[\s-]\w+)?\s*sås\b/gi, "")
     .replace(/\bwith\s+\w+(?:[\s-]\w+)?\s*sauce\b/gi, "")
     .replace(/\bpiripiri\b|\bpirri.?pirri\b|\bbearnaise\b|\bkebab\s*sås\b|\bvitlöks\s*sås\b|\baioli\b|\bbarbecue\b|\bbbq\b/gi, "")
-    .replace(/\(?skivad[et]?\)?|\(?sliced?\)?|skär\s+i\s+skivor/gi, "")
+    .replace(/\(?slajsad?\)?|\(?skivad[et]?\)?|\(?sliced?\)?|skär\s+i\s+skivor/gi, "")
     .replace(/extra\s*(?:ost|mozzarella|cheese|parmesan)/gi, "")
     .replace(/\bmed\b|\bwith\b|\bsize\b|\bstorlek\b/gi, "")
     // Remove trailing/standalone "pizza" word — menu item names don't use it as a suffix
