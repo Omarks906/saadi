@@ -20,6 +20,7 @@ import { extractOrderFromTranscript as extractOrderWithAI } from "@/lib/orderExt
 import { transcribeAudioUrl } from "@/lib/review/transcribe";
 import { reviewExtractedOrder } from "@/lib/review/order-review";
 import { normalizeToChilliOrder, normalizeSingleItemName, mergeModifierItems, extractObsNotes, buildPizzaDescription, type RawExtractedItem } from "@/lib/chilli/normalize-order";
+import { matchPizzaName } from "@/lib/chilli/match-pizza-name";
 import { safeParseChilliOrder } from "@/lib/chilli/order-schema";
 import { getPool, initDatabase } from "@/lib/db/connection";
 
@@ -1399,6 +1400,44 @@ async function upsertOrderFromStructuredOutput(params: {
       // Fallback: at minimum canonicalize pizza names
       for (const item of parsedItems) {
         item.name = normalizeSingleItemName(item.name);
+      }
+    }
+
+    // ── Transcript rescue ────────────────────────────────────────────────────
+    // If any pizza name from the structured output isn't recognised in the menu,
+    // the Vapi AI has garbled the item (e.g. "fetaost" for "Pizza Verde").
+    // Re-extract from the transcript using the menu-aware AI and use the result
+    // if it produces fully-recognised pizza names.
+    const hasUnrecognizedPizza = structuredChilliOrder?.pizzas.some(
+      (p) => matchPizzaName(p.pizzaName) === null,
+    ) ?? false;
+
+    if (hasUnrecognizedPizza && transcript && transcript.length >= 20) {
+      try {
+        console.log("[normalize] Unrecognized pizza(s) in structured output — attempting transcript rescue", callId);
+        const rescued = await extractOrderWithAI({ transcript, languageHint: "sv" });
+        if (rescued.items.length > 0) {
+          const rescuedNorm = normalizeToChilliOrder(rescued.items, transcript, extractedFulfillment);
+          const rescuedVal = safeParseChilliOrder(rescuedNorm);
+          if (
+            rescuedVal.success &&
+            rescuedVal.data.pizzas.every((p) => matchPizzaName(p.pizzaName) !== null)
+          ) {
+            structuredChilliOrder = rescuedVal.data;
+            const { pizzas: rp, drinks: rd, otherItems: ro } = rescuedVal.data;
+            const rescued_rebuilt = [
+              ...rp.map((p) => ({ name: p.pizzaName, quantity: 1, description: buildPizzaDescription(p) })),
+              ...rd.map((d) => ({ name: d.name, quantity: d.quantity })),
+              ...ro.map((o) => ({ name: o.name, quantity: o.quantity })),
+            ];
+            parsedItems.splice(0, parsedItems.length, ...rescued_rebuilt);
+            console.log("[normalize] Transcript rescue succeeded", callId, { pizzas: rp.map((p) => p.pizzaName) });
+          } else {
+            console.log("[normalize] Transcript rescue produced unrecognized names too — keeping structured output result", callId);
+          }
+        }
+      } catch (err) {
+        console.warn("[normalize] Transcript rescue failed", callId, (err as Error)?.message);
       }
     }
   }
