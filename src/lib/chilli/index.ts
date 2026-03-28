@@ -43,6 +43,7 @@ export {
   normalizeToChilliOrder,
   normalizeSingleItemName,
   mergeModifierItems,
+  extractObsNotes,
   buildPizzaDescription,
   type RawExtractedItem,
 } from "./normalize-order";

@@ -19,7 +19,7 @@ import { extractOrderFromTranscript } from "@/lib/order-extract";
 import { extractOrderFromTranscript as extractOrderWithAI } from "@/lib/orderExtraction";
 import { transcribeAudioUrl } from "@/lib/review/transcribe";
 import { reviewExtractedOrder } from "@/lib/review/order-review";
-import { normalizeToChilliOrder, normalizeSingleItemName, mergeModifierItems, buildPizzaDescription, type RawExtractedItem } from "@/lib/chilli/normalize-order";
+import { normalizeToChilliOrder, normalizeSingleItemName, mergeModifierItems, extractObsNotes, buildPizzaDescription, type RawExtractedItem } from "@/lib/chilli/normalize-order";
 import { safeParseChilliOrder } from "@/lib/chilli/order-schema";
 import { getPool, initDatabase } from "@/lib/db/connection";
 
@@ -1364,7 +1364,9 @@ async function upsertOrderFromStructuredOutput(params: {
       description: i?.description ?? (i?.notes != null ? String(i.notes) : null),
       modifications: Array.isArray(i?.modifications) ? i.modifications : [],
     }));
-    const merged = mergeModifierItems(rawItems);
+    // extractObsNotes: strip "(Obs: X)" annotations from names and recover any
+    // garbled pizza items that the Vapi AI embedded as observations on other items.
+    const merged = mergeModifierItems(extractObsNotes(rawItems));
     const normalizedOrder = normalizeToChilliOrder(merged, transcript ?? "", extractedFulfillment);
     const chilliValidation = safeParseChilliOrder(normalizedOrder);
     if (chilliValidation.success) {

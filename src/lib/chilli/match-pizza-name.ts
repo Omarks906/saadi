@@ -127,6 +127,9 @@ const PHONETIC_ALIASES: Record<string, string[]> = {
   ],
   "pizza verde": [
     "pizza verd", "pitza verde", "pizza verdé",
+    // Swedish STT hears "verde" as "värld" (world) — multiple suffix forms
+    "vidda värld", "vidda värld i", "pizza värld", "pizza värld i",
+    "vidda verd", "vidda verde",
   ],
   "hot hot": [
     "hothot", "hot-hot",
